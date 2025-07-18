@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
+#include <vector>
 
 #include <AudioTools.h>
 #include <AudioTools/Disk/AudioSourceSD.h>
@@ -15,14 +16,21 @@
 #include "config.h"
 #include "Driver.h"
 
+enum PlayerState { STOPPED,
+                   PLAYING,
+                   PAUSED };
+
 class PCBCUPID_PLAYERS {
 public:
-    PCBCUPID_PLAYERS(TwoWire& wire, uint8_t addr);
-    void begin(const char* ext);  // example: "mp3", "wav", "aac", "ogg"
-    void loop();
+  PCBCUPID_PLAYERS(TwoWire& wire, uint8_t addr);
+
+  ~PCBCUPID_PLAYERS();  // Destructor
+
+  void begin(const char* ext);  // example: "mp3", "wav", "aac", "ogg"
+  void loop();
 
 
-      // New audio control APIs
+  // New audio control APIs
   void play();
   void stop();
   void next();
@@ -30,37 +38,60 @@ public:
   float getVolume();
   void setAutoFade(bool enable);
   void previous();
+  void pause();
+
+  bool isPaused() const {
+    return paused;
+  }
+
+bool wasJustStopped() const {
+  return lastCommandWasStop;
+}
+
+
 
 
 private:
-    TwoWire& wire;
-    uint8_t addr;
+  TwoWire& wire;
+  uint8_t addr;
 
-    I2SStream i2s;
-    AudioPlayer* player = nullptr;
-    AudioSourceSD* source = nullptr;
 
-    MP3DecoderHelix mp3;
-    WAVDecoder wav;
-    OpusOggDecoder ogg;
-    AACDecoderHelix aac;
+  I2SStream i2s;
+  AudioPlayer* player = nullptr;
+  AudioSourceSD* source = nullptr;
+  PlayerState currentState = STOPPED;
 
-    PCBCUPID_NAU8325 amp;
+  MP3DecoderHelix mp3;
+  WAVDecoder wav;
+  OpusOggDecoder ogg;
+  AACDecoderHelix aac;
 
-    class InfoHandler : public AudioInfoSupport {
-    public:
-        PCBCUPID_NAU8325& amp;
-        I2SStream& i2s;
-        AudioInfo lastInfo;
+  PCBCUPID_NAU8325 amp;
 
-        InfoHandler(PCBCUPID_NAU8325& amp, I2SStream& i2s)
-            : amp(amp), i2s(i2s) {}
+  class InfoHandler : public AudioInfoSupport {
+  public:
+    PCBCUPID_NAU8325& amp;
+    I2SStream& i2s;
+    AudioInfo lastInfo;
 
-        void setAudioInfo(AudioInfo info) override;
-        AudioInfo audioInfo() override { return lastInfo; }
-    };
+    InfoHandler(PCBCUPID_NAU8325& amp, I2SStream& i2s)
+      : amp(amp), i2s(i2s) {}
 
-    InfoHandler* infoHandler = nullptr;
+    void setAudioInfo(AudioInfo info) override;
+    AudioInfo audioInfo() override {
+      return lastInfo;
+    }
+  };
 
-    static void printMetaData(MetaDataType type, const char* str, int len);
+  InfoHandler* infoHandler = nullptr;
+
+  static void printMetaData(MetaDataType type, const char* str, int len);
+  std::vector<String> fileList;  // List of matching audio files
+  int currentFileIndex = 0;      // Index of the currently playing file
+
+  bool paused = false;
+  bool lastCommandWasStop = false;
+
+  void playCurrentFile();  // Helper to play file at currentFileIndex
 };
+
