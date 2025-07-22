@@ -16,19 +16,22 @@
 #include "config.h"
 #include "Driver.h"
 
-enum PlayerState { STOPPED,
-                   PLAYING,
-                   PAUSED };
+enum PlayerState
+{
+  STOPPED,
+  PLAYING,
+  PAUSED
+};
 
-class PCBCUPID_PLAYERS {
+class PCBCUPID_PLAYERS
+{
 public:
-  PCBCUPID_PLAYERS(TwoWire& wire, uint8_t addr);
+  PCBCUPID_PLAYERS(TwoWire &wire, uint8_t addr);
 
-  ~PCBCUPID_PLAYERS();  // Destructor
+  ~PCBCUPID_PLAYERS(); // Destructor
 
-  void begin(const char* ext);  // example: "mp3", "wav", "aac", "ogg"
+  void begin(const char *ext); // example: "mp3", "wav", "aac", "ogg"
   void loop();
-
 
   // New audio control APIs
   void play();
@@ -39,26 +42,30 @@ public:
   void setAutoFade(bool enable);
   void previous();
   void pause();
+  void playCurrent();
+  String getCurrentFileName();
+  bool isPlaying();
 
-  bool isPaused() const {
+  bool isPaused() const
+  {
     return paused;
   }
 
-bool wasJustStopped() const {
-  return lastCommandWasStop;
-}
+  bool wasJustStopped() const
+  {
+    return lastCommandWasStop;
+  }
 
-
-
+  std::vector<String> fileList; // List of matching audio files
+  int currentFileIndex = 0;     // Index of the currently playing file
 
 private:
-  TwoWire& wire;
+  TwoWire &wire;
   uint8_t addr;
 
-
   I2SStream i2s;
-  AudioPlayer* player = nullptr;
-  AudioSourceSD* source = nullptr;
+  AudioPlayer *player = nullptr;
+  AudioSourceSD *source = nullptr;
   PlayerState currentState = STOPPED;
 
   MP3DecoderHelix mp3;
@@ -68,30 +75,31 @@ private:
 
   PCBCUPID_NAU8325 amp;
 
-  class InfoHandler : public AudioInfoSupport {
+  class InfoHandler : public AudioInfoSupport
+  {
   public:
-    PCBCUPID_NAU8325& amp;
-    I2SStream& i2s;
+    PCBCUPID_NAU8325 &amp;
+    I2SStream &i2s;
     AudioInfo lastInfo;
 
-    InfoHandler(PCBCUPID_NAU8325& amp, I2SStream& i2s)
-      : amp(amp), i2s(i2s) {}
+    InfoHandler(PCBCUPID_NAU8325 &amp, I2SStream &i2s)
+        : amp(amp), i2s(i2s) {}
 
     void setAudioInfo(AudioInfo info) override;
-    AudioInfo audioInfo() override {
+    AudioInfo audioInfo() override
+    {
       return lastInfo;
     }
   };
 
-  InfoHandler* infoHandler = nullptr;
+  InfoHandler *infoHandler = nullptr;
 
-  static void printMetaData(MetaDataType type, const char* str, int len);
-  std::vector<String> fileList;  // List of matching audio files
-  int currentFileIndex = 0;      // Index of the currently playing file
+  static void printMetaData(MetaDataType type, const char *str, int len);
+  // std::vector<String> fileList;  // List of matching audio files
+  // int currentFileIndex = 0;      // Index of the currently playing file
 
   bool paused = false;
   bool lastCommandWasStop = false;
 
-  void playCurrentFile();  // Helper to play file at currentFileIndex
+  void playCurrentFile(); // Helper to play file at currentFileIndex
 };
-
