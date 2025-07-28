@@ -16,6 +16,18 @@
 #include "config.h"
 #include "Driver.h"
 
+#include <AudioTools/CoreAudio/AudioPlayer.h>
+
+// These are only declarations
+extern unsigned long trackStartTime;
+extern unsigned long trackElapsed;
+extern unsigned long trackDuration;
+extern unsigned long totalPaused;
+
+
+extern unsigned long pauseStart;
+extern bool wasPaused;
+
 enum PlayerState
 {
   STOPPED,
@@ -45,6 +57,18 @@ public:
   void playCurrent();
   String getCurrentFileName();
   bool isPlaying();
+  audio_tools::AudioPlayer *getAudioPlayer();
+  AudioInfo audioInfo();
+  unsigned long currentPosition();
+  unsigned long totalSize();
+  void togglePlayPause();
+  // unsigned long getCurrentTrackDuration();
+  static unsigned long trackDurationSec; // Duration in seconds
+  unsigned long trackElapsedSec()
+  {
+    return trackElapsed / 1000;
+  }
+  unsigned long getTrackElapsedMillis() const { return trackElapsed; }
 
   bool isPaused() const
   {
@@ -100,6 +124,7 @@ private:
 
   bool paused = false;
   bool lastCommandWasStop = false;
+  unsigned long trackElapsed = 0; // track time in ms
 
   void playCurrentFile(); // Helper to play file at currentFileIndex
 };
