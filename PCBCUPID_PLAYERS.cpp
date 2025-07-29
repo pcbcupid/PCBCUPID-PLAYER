@@ -1,13 +1,12 @@
 #include "PCBCUPID_PLAYERS.h"
 
-unsigned long PCBCUPID_PLAYERS::trackDurationSec = 0;
+// unsigned long PCBCUPID_PLAYERS::trackDurationSec = 0;
 
 unsigned long trackStartTime = 0;
 unsigned long trackElapsed = 0;
 unsigned long trackDuration = 0;
 unsigned long totalPaused = 0;
-
-
+unsigned long pauseTime = 0;
 
 PCBCUPID_PLAYERS::PCBCUPID_PLAYERS(TwoWire &w, uint8_t a)
     : wire(w), addr(a), amp(w, a) {}
@@ -133,7 +132,7 @@ void PCBCUPID_PLAYERS::loop()
 
     if (player->isActive())
     {
-       trackElapsed = millis() - trackStartTime;
+      trackElapsed = millis() - trackStartTime;
     }
   }
 }
@@ -145,6 +144,7 @@ void PCBCUPID_PLAYERS::pause()
   player->stop(); // simulate pause
   paused = true;
   currentState = PAUSED;
+  pauseTime = millis(); // Capture when we paused
 }
 
 void PCBCUPID_PLAYERS::play()
@@ -164,6 +164,9 @@ void PCBCUPID_PLAYERS::play()
 
   if (paused && currentState == PAUSED)
   {
+    // Add paused duration to totalPaused
+    unsigned long resumeTime = millis();
+    totalPaused += resumeTime - pauseTime;
     player->play(); // resume
     paused = false;
     currentState = PLAYING;
@@ -240,51 +243,76 @@ void PCBCUPID_PLAYERS::printMetaData(MetaDataType type, const char *str, int len
   Serial.print(": ");
   Serial.println(str);
 
-  if (strncmp(str, "TLEN=", 5) == 0)
-  {
-    int durationMs = atoi(str + 5); // Skip "TLEN="
-    trackDurationSec = durationMs / 1000;
-    Serial.printf("Parsed TLEN duration: %lu seconds (from ID3 TLEN tag)\n", trackDurationSec);
-  }
+  // if (strncmp(str, "TLEN=", 5) == 0)
+  // {
+  //   int durationMs = atoi(str + 5); // Skip "TLEN="
+  //   trackDurationSec = durationMs / 1000;
+  //   Serial.printf("Parsed TLEN duration: %lu seconds (from ID3 TLEN tag)\n", trackDurationSec);
+  // }
 }
 
 // Helper to play current file from fileList
+
 void PCBCUPID_PLAYERS::playCurrentFile()
 {
-  if (!fileList.empty() && player && source)
-  {
-    String filepath = fileList[currentFileIndex];
-    Serial.printf("Playing: %s\n", filepath.c_str());
+  if (fileList.empty() || !player || !source)
+    return;
 
-    source->setIndex(currentFileIndex); // set current file index
-    player->begin(currentFileIndex);    // begin player at index
-    // amp.powerOn();
-    Serial.println("Amp power ON");
-    // Estimate duration based on source size and bitrate
-    // Estimate duration based on source size and bitrate
-    AudioInfo info = player->audioInfo();
-    int bitrate = info.sample_rate * info.bits_per_sample * info.channels; // bits per second
-    if (bitrate > 0 && source)
-    {
-      size_t fileSize = source->size(); // bytes
-      trackDurationSec = (fileSize * 8) / bitrate;
-    }
-    else
-    {
-      trackDurationSec = 240; // fallback
-    }
-    trackElapsed = 0;
+  String filepath = fileList[currentFileIndex];
+  source->setIndex(currentFileIndex);
+  player->begin(currentFileIndex);
 
-    player->play();                          // start playback
-    unsigned long trackStartTime = millis(); // use the global variable, don't redeclare
-    trackDurationSec = 0;                    // reset before each new track
-    unsigned long pauseStart = 0;
-    unsigned long totalPaused = 0;
-    bool wasPaused = false;
+  trackStartTime = millis();
+  totalPaused = 0;
+  paused = false;
+  currentState = PLAYING;
 
-    currentState = PLAYING;
-  }
+  this->trackDurationSec = calculateTrackDuration(filepath);
+  if (trackDurationSec == 0)
+    trackDurationSec = 180; // fallback only if not parsed
+
+  AudioInfo info = player->audioInfo();
+  amp.begin(info.sample_rate, info.bits_per_sample);
+  amp.powerOn();
+
+  player->play();
 }
+// void PCBCUPID_PLAYERS::playCurrentFile()
+// {
+//   if (!fileList.empty() && player && source)
+//   {
+//     String filepath = fileList[currentFileIndex];
+//     Serial.printf("Playing: %s\n", filepath.c_str());
+
+//     source->setIndex(currentFileIndex); // set current file index
+//     player->begin(currentFileIndex);    // begin player at index
+//     // amp.powerOn();
+//     Serial.println("Amp power ON");
+//     // Estimate duration based on source size and bitrate
+//     // Estimate duration based on source size and bitrate
+//     AudioInfo info = player->audioInfo();
+//     int bitrate = info.sample_rate * info.bits_per_sample * info.channels; // bits per second
+//     if (bitrate > 0 && source)
+//     {
+//       size_t fileSize = source->size(); // bytes
+//       trackDurationSec = (fileSize * 8) / bitrate;
+//     }
+//     else
+//     {
+//       trackDurationSec = 240; // fallback
+//     }
+//     trackElapsed = 0;
+
+//     player->play();                          // start playback
+//     unsigned long trackStartTime = millis(); // use the global variable, don't redeclare
+//     trackDurationSec = 0;                    // reset before each new track
+//     unsigned long pauseStart = 0;
+//     unsigned long totalPaused = 0;
+//     bool wasPaused = false;
+
+//     currentState = PLAYING;
+//   }
+// }
 
 void PCBCUPID_PLAYERS::playCurrent()
 {
@@ -353,28 +381,170 @@ void PCBCUPID_PLAYERS::togglePlayPause()
   }
 }
 
-// unsigned long PCBCUPID_PLAYERS::getCurrentTrackDuration()
-// {
-//   if (!player || fileList.empty())
-//     return 0;
+unsigned long PCBCUPID_PLAYERS::secondsPlayed()
+{
+  if (currentState == STOPPED)
+    return 0;
 
-//   AudioInfo info = player->audioInfo();
-//   if (info.bits_per_sample == 0 || info.sample_rate == 0)
-//     return 0;
+  if (currentState == PAUSED)
+  {
+    // When paused, return elapsed up to when it was paused
+    return (pauseTime - trackStartTime - totalPaused) / 1000;
+  }
+  else
+  {
+    // While playing, use current millis
+    return (millis() - trackStartTime - totalPaused) / 1000;
+  }
+}
 
-//   String filePath = "/" + fileList[currentFileIndex];
-//   File file = SD.open(filePath.c_str());
-//   if (!file)
-//     return 0;
+// Parses MP3 duration via ID3 TLEN or VBR header
+unsigned long PCBCUPID_PLAYERS::calculateTrackDuration(const String &filename)
+{
+  File f = SD.open(filename);
+  if (!f)
+    return 0;
+  size_t fileSize = f.size();
 
-//   size_t fileSize = file.size();
-//   file.close();
+  unsigned long duration = 0;
+  if (filename.endsWith(".mp3"))
+  {
+    // Skip ID3v2
+    uint8_t hdr[10];
+    f.read(hdr, 10);
+    if (hdr[0] == 'I' && hdr[1] == 'D' && hdr[2] == '3')
+    {
+      uint32_t sz = ((hdr[6] & 0x7F) << 21) | ((hdr[7] & 0x7F) << 14) | ((hdr[8] & 0x7F) << 7) | (hdr[9] & 0x7F);
+      f.seek(10 + sz);
+    }
+    else
+    {
+      f.seek(0);
+    }
 
-//   int bitrate = info.sample_rate * info.bits_per_sample * info.channels;
+    uint8_t frame[4];
+    f.read(frame, 4);
+    if (frame[0] == 0xFF && (frame[1] & 0xE0) == 0xE0)
+    {
+      int kbps = parseMP3Bitrate(frame);
+      if (kbps > 0)
+      {
+        duration = (fileSize * 8UL) / (kbps * 1000UL);
+      }
+    }
 
-//   if (bitrate == 0)
-//     return 0;
+    // Check for Xing/VBRI header
+    f.read(frame, 4);
+    String tag = String((char *)frame);
+    if (tag == "Xing" || tag == "Info")
+    {
+      // Seek and extract total frames/count for better duration
+      f.read(frame, 4);
+      uint32_t frames = (frame[0] << 24) | (frame[1] << 16) | (frame[2] << 8) | frame[3];
+      if (frames > 0)
+      {
+        AudioInfo info = player->audioInfo();
+        unsigned long spf = info.sample_rate / 1152; // samples per frame for MPEG
+        duration = frames * spf / info.channels;
+      }
+    }
+    else if (tag == "VBRI")
+    {
+      f.seek(f.position() + 14);
+      uint8_t ct[4];
+      f.read(ct, 4);
+      uint32_t frames = (ct[0] << 24) | (ct[1] << 16) | (ct[2] << 8) | ct[3];
+      AudioInfo info = player->audioInfo();
+      unsigned long spf = info.sample_rate / 1152;
+      duration = frames * spf / info.channels;
+    }
+  }
+  else if (filename.endsWith(".wav"))
+  {
+    duration = parseWAVDuration(f);
+  }
+  else if (filename.endsWith(".ogg"))
+  {
+    duration = parseOGGDuration(f);
+  }
+  else
+  {
+    duration = estimateBitrateBased(f, fileSize);
+  }
+  f.close();
+  return duration;
+}
 
-//   unsigned long durationSeconds = (fileSize * 8UL) / bitrate;
-//   return durationSeconds;
-// }
+int PCBCUPID_PLAYERS::parseMP3Bitrate(const uint8_t *header)
+{
+  const int bitrateTable[2][3][16] = {
+      {// MPEG Version 2 & 2.5
+       {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
+       {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
+       {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}},
+      {// MPEG Version 1
+       {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0},
+       {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0},
+       {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}}};
+
+  uint8_t versionBits = (header[1] >> 3) & 0x03;
+  uint8_t layerBits = (header[1] >> 1) & 0x03;
+  uint8_t bitrateBits = (header[2] >> 4) & 0x0F;
+
+  int versionIndex = (versionBits == 3) ? 1 : 0; // 1 = MPEG1, 0 = MPEG2/2.5
+  int layerIndex = (layerBits == 3) ? 0 : (3 - layerBits);
+
+  return bitrateTable[versionIndex][layerIndex][bitrateBits]; // in kbps
+}
+
+unsigned long PCBCUPID_PLAYERS::parseWAVDuration(File &file)
+{
+  file.seek(24);
+  uint32_t sampleRate = 0;
+  file.read((uint8_t *)&sampleRate, 4);
+
+  file.seek(22);
+  uint16_t channels = 0;
+  file.read((uint8_t *)&channels, 2);
+
+  file.seek(34);
+  uint16_t bitsPerSample = 0;
+  file.read((uint8_t *)&bitsPerSample, 2);
+
+  file.seek(40);
+  uint32_t dataSize = 0;
+  file.read((uint8_t *)&dataSize, 4);
+
+  uint32_t byteRate = sampleRate * bitsPerSample * channels / 8;
+  return byteRate > 0 ? dataSize / byteRate : 0;
+}
+
+unsigned long PCBCUPID_PLAYERS::estimateBitrateBased(File &file, size_t fileSize)
+{
+  file.seek(0);
+  unsigned long avgBitrate = 128000; // assume 128kbps default
+  return (fileSize * 8UL) / avgBitrate;
+}
+
+unsigned long PCBCUPID_PLAYERS::parseOGGDuration(File &file)
+{
+  // Heuristic: look for "OggS" at end of file and extract granule position
+  size_t fileSize = file.size();
+  const int scanSize = 2048;
+
+  for (int i = fileSize - scanSize; i < (int)fileSize - 10; i++)
+  {
+    file.seek(i);
+    char sig[4];
+    file.read((uint8_t *)sig, 4);
+    if (memcmp(sig, "OggS", 4) == 0)
+    {
+      file.seek(i + 6);
+      uint64_t granule = 0;
+      file.read((uint8_t *)&granule, 8);
+      uint32_t sampleRate = 44100; // most common
+      return granule / sampleRate;
+    }
+  }
+  return 0;
+}

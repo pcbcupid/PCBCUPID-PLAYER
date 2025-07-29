@@ -23,7 +23,7 @@ extern unsigned long trackStartTime;
 extern unsigned long trackElapsed;
 extern unsigned long trackDuration;
 extern unsigned long totalPaused;
-
+extern unsigned long pauseTime;
 
 extern unsigned long pauseStart;
 extern bool wasPaused;
@@ -62,8 +62,15 @@ public:
   unsigned long currentPosition();
   unsigned long totalSize();
   void togglePlayPause();
-  // unsigned long getCurrentTrackDuration();
-  static unsigned long trackDurationSec; // Duration in seconds
+  unsigned long trackDurationSec = 0;
+  unsigned long secondsPlayed();
+
+  unsigned long calculateTrackDuration(const String &filename);
+  int parseMP3Bitrate(const uint8_t *header);
+  unsigned long parseWAVDuration(File &file);
+  unsigned long estimateBitrateBased(File &file, size_t fileSize);
+  unsigned long parseOGGDuration(File &file);
+
   unsigned long trackElapsedSec()
   {
     return trackElapsed / 1000;
