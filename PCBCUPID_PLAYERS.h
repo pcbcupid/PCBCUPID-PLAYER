@@ -3,8 +3,6 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <vector>
-
 #include <AudioTools.h>
 #include <AudioTools/Disk/AudioSourceSD.h>
 #include <AudioTools/CoreAudio/AudioPlayer.h>
@@ -12,13 +10,18 @@
 #include <AudioTools/AudioCodecs/CodecWAV.h>
 #include <AudioTools/AudioCodecs/CodecOpusOgg.h>
 #include <AudioTools/AudioCodecs/CodecAACHelix.h>
+#include <AudioTools/CoreAudio/AudioPlayer.h>
 
 #include "config.h"
 #include "Driver.h"
 
-#include <AudioTools/CoreAudio/AudioPlayer.h>
+enum PlayerState
+{
+  STOPPED,
+  PLAYING,
+  PAUSED
+};
 
-// These are only declarations
 extern unsigned long trackStartTime;
 extern unsigned long trackElapsed;
 extern unsigned long trackDuration;
@@ -28,17 +31,10 @@ extern unsigned long pauseTime;
 extern unsigned long pauseStart;
 extern bool wasPaused;
 
-enum PlayerState
-{
-  STOPPED,
-  PLAYING,
-  PAUSED
-};
-
 class PCBCUPID_PLAYERS
 {
 public:
-  PCBCUPID_PLAYERS(TwoWire &wire, uint8_t addr);
+  PCBCUPID_PLAYERS(TwoWire &wire, uint8_t addr); // remove address
 
   ~PCBCUPID_PLAYERS(); // Destructor
 
@@ -50,7 +46,7 @@ public:
   void stop();
   void next();
   void setVolume(float volume);
-  float getVolume();
+  float getVolume(); // Returns maximum volume
   void setAutoFade(bool enable);
   void previous();
   void pause();
@@ -59,13 +55,14 @@ public:
   bool isPlaying();
   audio_tools::AudioPlayer *getAudioPlayer();
   AudioInfo audioInfo();
-  unsigned long currentPosition();
+  unsigned long currentPosition(); // change the name to currentPositionFromSD
   unsigned long totalSize();
-  void togglePlayPause();
+  void togglePlayPause(); // remove this function and add it on soundpod
   unsigned long trackDurationSec = 0;
-  unsigned long secondsPlayed();
-
+  unsigned long secondsPlayed(); // change the name to pausedTime()
   unsigned long calculateTrackDuration(const String &filename);
+
+  // private function
   int parseMP3Bitrate(const uint8_t *header);
   unsigned long parseWAVDuration(File &file);
   unsigned long estimateBitrateBased(File &file, size_t fileSize);
@@ -82,6 +79,7 @@ public:
     return paused;
   }
 
+  //private
   bool wasJustStopped() const
   {
     return lastCommandWasStop;
@@ -126,9 +124,6 @@ private:
   InfoHandler *infoHandler = nullptr;
 
   static void printMetaData(MetaDataType type, const char *str, int len);
-  // std::vector<String> fileList;  // List of matching audio files
-  // int currentFileIndex = 0;      // Index of the currently playing file
-
   bool paused = false;
   bool lastCommandWasStop = false;
   unsigned long trackElapsed = 0; // track time in ms
