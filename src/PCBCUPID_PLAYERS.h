@@ -31,6 +31,8 @@ public:
 
   ~PCBCUPID_PLAYERS(); // Destructor
 
+  unsigned long trackDurationSec = 0; // make private
+
   void begin(const char *ext); // example: "mp3", "wav", "aac", "ogg"
   void loop();
 
@@ -43,16 +45,15 @@ public:
   void setAutoFade(bool enable);
   void previous();
   void pause();
-  void playCurrent();
+  void playCurrent(); //change the logic call the playcurrentFile directly from public
   String getCurrentFileName();
   bool isPlaying();
   audio_tools::AudioPlayer *getAudioPlayer();
   AudioInfo audioInfo();
   unsigned long currentPositionFromSD();
   unsigned long totalSize();
-  unsigned long trackDurationSec = 0;
-  unsigned long pausedPlayedtime();
-  void resetPlayTime();
+  unsigned long pausedPlayedtime(); // use elapsed time
+  void resetPlayTime(); // make private
 
   unsigned long trackElapsedSec()
   {
@@ -65,7 +66,6 @@ public:
     return paused;
   }
 
-  //private
   bool wasJustStopped() const
   {
     return lastCommandWasStop;
@@ -88,7 +88,7 @@ private:
   OpusOggDecoder ogg;
   AACDecoderHelix aac;
 
-  PCBCUPID_NAU8325 amp;
+  PCBCUPID_NAU8325 amp; //use nau8325 variable name
 
   class InfoHandler : public AudioInfoSupport
   {
