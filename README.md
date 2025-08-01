@@ -114,8 +114,8 @@ Special thanks to the open-source community for foundational research and NAU832
 **Original Author:**
 
 - **Karthik Elumalai** – @PCBCUPID
-- **Version: 1.0.0
-- **License: MIT License (refer to the LICENSE file for terms)
+- **Version**: 1.0.0
+- **License**: MIT License (refer to the LICENSE file for terms)
 
 ---
 
