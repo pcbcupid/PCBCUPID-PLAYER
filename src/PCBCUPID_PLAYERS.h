@@ -3,8 +3,6 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <vector>
-
 #include <AudioTools.h>
 #include <AudioTools/Disk/AudioSourceSD.h>
 #include <AudioTools/CoreAudio/AudioPlayer.h>
@@ -26,13 +24,6 @@ extern unsigned long pauseTime;
 extern unsigned long pauseStart;
 extern bool wasPaused;
 
-enum PlayerState
-{
-  STOPPED,
-  PLAYING,
-  PAUSED
-};
-
 class PCBCUPID_PLAYERS
 {
 public:
@@ -48,7 +39,7 @@ public:
   void stop();
   void next();
   void setVolume(float volume);
-  float getVolume();
+  float getVolume(); // Returns maximum volume
   void setAutoFade(bool enable);
   void previous();
   void pause();
@@ -74,6 +65,7 @@ public:
     return paused;
   }
 
+  //private
   bool wasJustStopped() const
   {
     return lastCommandWasStop;
