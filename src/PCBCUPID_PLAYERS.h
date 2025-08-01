@@ -45,6 +45,9 @@ public:
   void setAutoFade(bool enable);
   void previous();
   void pause();
+  void playTrackIndex(int index); //play the song based on the File index
+  int getTrackIndex();
+  void playTrack(String TrackName); // play the song directly
   void playCurrentTrack(); //change the logic call the playcurrentFile directly from public
   String getCurrentTrackName();
   bool isTrackPlaying();
