@@ -2,7 +2,7 @@
 #include "PCBCUPID_PLAYERS.h"
 
 
-PCBCUPID_PLAYERS player(Wire, 0x21);  // Your custom I2C address
+PCBCUPID_PLAYERS player(Wire);  // Your custom I2Cbus
 
 float vol = 0.5;  //volume can be set by the dev user
 

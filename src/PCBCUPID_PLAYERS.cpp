@@ -1,15 +1,14 @@
 #include "PCBCUPID_PLAYERS.h"
 
-// unsigned long PCBCUPID_PLAYERS::trackDurationSec = 0;
-
+/* Global variables*/
 unsigned long trackStartTime = 0;
 unsigned long trackElapsed = 0;
 unsigned long trackDuration = 0;
 unsigned long totalPaused = 0;
 unsigned long pauseTime = 0;
 
-PCBCUPID_PLAYERS::PCBCUPID_PLAYERS(TwoWire &w, uint8_t a)
-    : wire(w), addr(a), amp(w, a) {}
+PCBCUPID_PLAYERS::PCBCUPID_PLAYERS(TwoWire &w)
+    : wire(w), amp(w) {}
 
 PCBCUPID_PLAYERS::~PCBCUPID_PLAYERS()
 {
@@ -243,15 +242,7 @@ void PCBCUPID_PLAYERS::printMetaData(MetaDataType type, const char *str, int len
   Serial.print(": ");
   Serial.println(str);
 
-  // if (strncmp(str, "TLEN=", 5) == 0)
-  // {
-  //   int durationMs = atoi(str + 5); // Skip "TLEN="
-  //   trackDurationSec = durationMs / 1000;
-  //   Serial.printf("Parsed TLEN duration: %lu seconds (from ID3 TLEN tag)\n", trackDurationSec);
-  // }
-}
-
-// Helper to play current file from fileList
+} 
 
 void PCBCUPID_PLAYERS::playCurrentFile()
 {
@@ -259,17 +250,21 @@ void PCBCUPID_PLAYERS::playCurrentFile()
     return;
 
   String filepath = fileList[currentFileIndex];
+  Serial.printf("Playing: %s\n", filepath.c_str());
+
   source->setIndex(currentFileIndex);
   player->begin(currentFileIndex);
 
+  // Reset playback timing
   trackStartTime = millis();
   totalPaused = 0;
   paused = false;
   currentState = PLAYING;
+  resetPlayTime();  //Ensures elapsed timer resets
 
   this->trackDurationSec = calculateTrackDuration(filepath);
   if (trackDurationSec == 0)
-    trackDurationSec = 180; // fallback only if not parsed
+    trackDurationSec = 180; // fallback
 
   AudioInfo info = player->audioInfo();
   amp.begin(info.sample_rate, info.bits_per_sample);
@@ -277,42 +272,6 @@ void PCBCUPID_PLAYERS::playCurrentFile()
 
   player->play();
 }
-// void PCBCUPID_PLAYERS::playCurrentFile()
-// {
-//   if (!fileList.empty() && player && source)
-//   {
-//     String filepath = fileList[currentFileIndex];
-//     Serial.printf("Playing: %s\n", filepath.c_str());
-
-//     source->setIndex(currentFileIndex); // set current file index
-//     player->begin(currentFileIndex);    // begin player at index
-//     // amp.powerOn();
-//     Serial.println("Amp power ON");
-//     // Estimate duration based on source size and bitrate
-//     // Estimate duration based on source size and bitrate
-//     AudioInfo info = player->audioInfo();
-//     int bitrate = info.sample_rate * info.bits_per_sample * info.channels; // bits per second
-//     if (bitrate > 0 && source)
-//     {
-//       size_t fileSize = source->size(); // bytes
-//       trackDurationSec = (fileSize * 8) / bitrate;
-//     }
-//     else
-//     {
-//       trackDurationSec = 240; // fallback
-//     }
-//     trackElapsed = 0;
-
-//     player->play();                          // start playback
-//     unsigned long trackStartTime = millis(); // use the global variable, don't redeclare
-//     trackDurationSec = 0;                    // reset before each new track
-//     unsigned long pauseStart = 0;
-//     unsigned long totalPaused = 0;
-//     bool wasPaused = false;
-
-//     currentState = PLAYING;
-//   }
-// }
 
 void PCBCUPID_PLAYERS::playCurrent()
 {
@@ -343,7 +302,7 @@ AudioInfo PCBCUPID_PLAYERS::audioInfo()
   return infoHandler ? infoHandler->lastInfo : AudioInfo();
 }
 
-unsigned long PCBCUPID_PLAYERS::currentPosition()
+unsigned long PCBCUPID_PLAYERS::currentPositionFromSD()
 {
   if (!player)
     return 0;
@@ -366,22 +325,7 @@ unsigned long PCBCUPID_PLAYERS::totalSize()
   return size;
 }
 
-void PCBCUPID_PLAYERS::togglePlayPause()
-{
-  if (!player)
-    return;
-
-  if (player->isActive())
-  {
-    pause();
-  }
-  else
-  {
-    play();
-  }
-}
-
-unsigned long PCBCUPID_PLAYERS::secondsPlayed()
+unsigned long PCBCUPID_PLAYERS::pausedPlayedtime()
 {
   if (currentState == STOPPED)
     return 0;
@@ -528,7 +472,7 @@ unsigned long PCBCUPID_PLAYERS::estimateBitrateBased(File &file, size_t fileSize
 
 unsigned long PCBCUPID_PLAYERS::parseOGGDuration(File &file)
 {
-  // Heuristic: look for "OggS" at end of file and extract granule position
+  // look for "OggS" at end of file and extract granule position
   size_t fileSize = file.size();
   const int scanSize = 2048;
 
@@ -542,9 +486,17 @@ unsigned long PCBCUPID_PLAYERS::parseOGGDuration(File &file)
       file.seek(i + 6);
       uint64_t granule = 0;
       file.read((uint8_t *)&granule, 8);
-      uint32_t sampleRate = 44100; // most common
+      uint32_t sampleRate = 44100; // most common bit rate 
       return granule / sampleRate;
     }
   }
   return 0;
 }
+
+void PCBCUPID_PLAYERS::resetPlayTime()
+{
+  playStartMillis = millis();
+  manualElapsedOverride = 0;
+  trackStartTime = millis(); // Global timer update
+}
+
