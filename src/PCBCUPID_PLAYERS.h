@@ -22,7 +22,7 @@ extern unsigned long totalPaused;
 extern unsigned long pauseTime;
 
 extern unsigned long pauseStart;
-extern bool wasPaused;
+extern bool wasPaused; // remove UI related components
 
 class PCBCUPID_PLAYERS
 {
@@ -45,15 +45,19 @@ public:
   void setAutoFade(bool enable);
   void previous();
   void pause();
-  void playCurrent(); //change the logic call the playcurrentFile directly from public
-  String getCurrentFileName();
-  bool isPlaying();
+  void playCurrentTrack(); //change the logic call the playcurrentFile directly from public
+  String getCurrentTrackName();
+  bool isTrackPlaying();
+  void getCurrentTrackTime();
+  void getTotalTrackTime();
   audio_tools::AudioPlayer *getAudioPlayer();
   AudioInfo audioInfo();
-  unsigned long currentPositionFromSD();
-  unsigned long totalSize();
-  unsigned long pausedPlayedtime(); // use elapsed time
-  void resetPlayTime(); // make private
+  
+  // // remove UI files
+  // unsigned long currentPositionFromSD(); // remove UI Functions
+  // unsigned long getFileSize(); // getFile size
+  // unsigned long pausedPlayedtime(); // use elapsed time
+  // void resetPlayTime(); // make private 
 
   unsigned long trackElapsedSec()
   {
