@@ -22,26 +22,58 @@ void loop() {
 
   if (Serial.available()) {
     char c = Serial.read();
-    if (c == 'n') player.next();
-    if (c == 's') player.stop();
-    if (c == 'p') {
-      if (player.wasJustStopped()) {
-        player.play();  // force fresh play
-      } else if (player.isPaused()) {
-        player.play();  // resume
+    Serial.print("Received input: ");
+    Serial.println(c);
+    
+    if (c >= '0' && c <= '9') {
+      int trackIndex = c - '0';
+      if (trackIndex < player.getTrackCount()) {
+        if (player.playTrack(trackIndex)) {
+          Serial.print("Playing track: ");
+          Serial.println(player.currentTrackName());
+        } else {
+          Serial.println("Failed to play track");
+        }
       } else {
-        player.pause();  // pause
+        Serial.print("Invalid track index. Please use 0-");
+        Serial.println(player.getTrackCount() - 1);
       }
     }
-
-    if (c == 'r') player.previous();
-    if (c == '+') {
+    else if (c == 'n') {
+      Serial.println("Next track");
+      player.next();
+    }
+    else if (c == 'r') {
+      Serial.println("Previous track");
+      player.previous();
+    }
+    else if (c == 's') {
+      Serial.println("Stopping playback");
+      player.stop();
+    }
+    else if (c == 'p') {
+      if (player.isStopped()) {
+        Serial.println("Restarting playback");
+        player.play();
+      } else if (player.isPaused()) {
+        Serial.println("Resuming playback");
+        player.play();
+      } else {
+        Serial.println("Pausing playback");
+        player.pause();
+      }
+    }
+    else if (c == '+') {
       vol = min(1.0f, vol + 0.1f);
       player.setVolume(vol);
+      Serial.print("Volume: ");
+      Serial.println(vol * 100);
     }
-    if (c == '-') {
+    else if (c == '-') {
       vol = max(0.0f, vol - 0.1f);
       player.setVolume(vol);
+      Serial.print("Volume: ");
+      Serial.println(vol * 100);
     }
   }
 }

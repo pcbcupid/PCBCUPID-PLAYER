@@ -10,118 +10,126 @@
 #include <AudioTools/AudioCodecs/CodecWAV.h>
 #include <AudioTools/AudioCodecs/CodecOpusOgg.h>
 #include <AudioTools/AudioCodecs/CodecAACHelix.h>
-#include <AudioTools/CoreAudio/AudioPlayer.h>
 #include "config.h"
 #include "Driver.h"
 
+// Forward declarations
+namespace audio_tools {
+    class I2SStream;
+    class AudioBoardStream;
+}
 
-extern unsigned long trackStartTime;
-extern unsigned long trackElapsed;
-extern unsigned long trackDuration;
-extern unsigned long totalPaused;
-extern unsigned long pauseTime;
-
-extern unsigned long pauseStart;
-extern bool wasPaused;
+enum PlayerState {
+  STOPPED,
+  PLAYING,
+  PAUSED
+};
 
 class PCBCUPID_PLAYERS
 {
 public:
-  PCBCUPID_PLAYERS(TwoWire &wire);
+    PCBCUPID_PLAYERS(TwoWire &wire);
+    ~PCBCUPID_PLAYERS();
 
-  ~PCBCUPID_PLAYERS(); // Destructor
+    // Initialization and main loop
+    void begin(const char *ext);
+    void loop();
 
-  void begin(const char *ext); // example: "mp3", "wav", "aac", "ogg"
-  void loop();
+    // Playback controls
+    void play();
+    void pause();
+    void stop();
+    void next();
+    void previous();
 
-  // New audio control APIs
-  void play();
-  void stop();
-  void next();
-  void setVolume(float volume);
-  float getVolume(); // Returns maximum volume
-  void setAutoFade(bool enable);
-  void previous();
-  void pause();
-  void playCurrent();
-  String getCurrentFileName();
-  bool isPlaying();
-  audio_tools::AudioPlayer *getAudioPlayer();
-  AudioInfo audioInfo();
-  unsigned long currentPositionFromSD();
-  unsigned long totalSize();
-  unsigned long trackDurationSec = 0;
-  unsigned long pausedPlayedtime();
-  void resetPlayTime();
+    // Volume control
+    void setVolume(float volume);
+    float getVolume() const;
+    void setAutoFade(bool enable);
 
-  unsigned long trackElapsedSec()
-  {
-    return trackElapsed / 1000;
-  }
-  unsigned long getTrackElapsedMillis() const { return trackElapsed; }
+    // Track navigation
+    bool playTrack(int index);
+    int currentTrackIndex() const;
+    int getTrackCount() const { return trackList.size(); }
+    int trackCount() const { return trackList.size(); }
 
-  bool isPaused() const
-  {
-    return paused;
-  }
+    // Player state
+    bool isPlaying() const;
+    bool isPaused() const;
+    bool isStopped() const;
+    String currentTrackName() const;
+    unsigned long currentTrackElapsedSeconds() const;
+    unsigned long currentTrackDurationSeconds() const;
 
-  //private
-  bool wasJustStopped() const
-  {
-    return lastCommandWasStop;
-  }
-
-  std::vector<String> fileList; // List of matching audio files
-  int currentFileIndex = 0;     // Index of the currently playing file
+    // Audio info
+    audio_tools::AudioPlayer* audioPlayer();
+    AudioInfo audioInfo() const;
+    AudioDecoder* getAudioDecoder(const char *ext);
 
 private:
-  TwoWire &wire;
-  uint8_t addr;
+    // Internal state
+    enum PlayerState { STOPPED, PLAYING, PAUSED };
+    PlayerState state = STOPPED;
+    float volume = 0.5f;  // Default volume (0.0 to 1.0)
+    
+    // Track management
+    std::vector<String> trackList;
+    int trackIndex = 0;
 
-  I2SStream i2s;
-  AudioPlayer *player = nullptr;
-  AudioSourceSD *source = nullptr;
-  PlayerState currentState = STOPPED;
+    // Timing
+    unsigned long playStartMillis = 0;
+    unsigned long pauseStartMillis = 0;
+    unsigned long totalPausedMillis = 0;
+    bool paused = false;
+    bool stopped = true;
+    bool lastCommandWasStop = false;
 
-  MP3DecoderHelix mp3;
-  WAVDecoder wav;
-  OpusOggDecoder ogg;
-  AACDecoderHelix aac;
+    // Audio components
+    audio_tools::I2SStream* i2s = nullptr;
+    audio_tools::AudioBoardStream* nau8325 = nullptr;
+    AudioSourceSD* source = nullptr;
+    audio_tools::AudioPlayer* player = nullptr;
+    
+    // Info handler
+    class InfoHandler : public AudioInfoSupport {
+        audio_tools::I2SStream* i2s = nullptr;
+        audio_tools::AudioBoardStream* nau8325 = nullptr;
+        PCBCUPID_NAU8325* nau8325_control = nullptr;
+    public:
+        AudioInfo lastInfo;
+        InfoHandler(audio_tools::AudioBoardStream* a, audio_tools::I2SStream* i, PCBCUPID_NAU8325* control) 
+            : nau8325(a), i2s(i), nau8325_control(control) {}
+        void setAudioInfo(AudioInfo info) override;
+        AudioInfo audioInfo() override { return lastInfo; }  
+    } *infoHandler = nullptr;
 
-  PCBCUPID_NAU8325 amp;
+    // Internal methods
+    void buildPlaylist(const char *ext);
+    void playTrackAtIndex(int index);
+    void playCurrentTrack();
+    void resetPlayTime();
+    
+    // Duration/bitrate helpers
+    unsigned long calculateTrackDuration(const String &filename) const;
+    unsigned long parseWAVDuration(File &file) const;
+    unsigned long parseOGGDuration(File &file) const;
+    unsigned long estimateBitrateBased(File &file, size_t fileSize) const;
+    int parseMP3Bitrate(const uint8_t *header) const;
+    
+    // Internal timing methods
+    unsigned long currentTrackElapsedMillis() const;
+    unsigned long currentTrackDurationMillis() const;
+    unsigned long currentTrackPositionBytes() const;
+    unsigned long currentTrackTotalBytes() const;
+    
+    // Metadata callback
+    static void printMetaData(MetaDataType type, const char *str, int len);
+    
+    TwoWire &wire;
+    MP3DecoderHelix mp3;
+    WAVDecoder wav;
+    OpusOggDecoder ogg;
+    AACDecoderHelix aac;
+    PCBCUPID_NAU8325 nau8325_control;  
 
-  class InfoHandler : public AudioInfoSupport
-  {
-  public:
-    PCBCUPID_NAU8325 &amp;
-    I2SStream &i2s;
-    AudioInfo lastInfo;
-
-    InfoHandler(PCBCUPID_NAU8325 &amp, I2SStream &i2s)
-        : amp(amp), i2s(i2s) {}
-
-    void setAudioInfo(AudioInfo info) override;
-    AudioInfo audioInfo() override
-    {
-      return lastInfo;
-    }
-  };
-
-  InfoHandler *infoHandler = nullptr;
-
-  static void printMetaData(MetaDataType type, const char *str, int len);
-
-  unsigned long calculateTrackDuration(const String &filename);
-  int parseMP3Bitrate(const uint8_t *header);
-  unsigned long parseWAVDuration(File &file);
-  unsigned long estimateBitrateBased(File &file, size_t fileSize);
-  unsigned long parseOGGDuration(File &file);
-
-  bool paused = false;
-  bool lastCommandWasStop = false;
-  unsigned long trackElapsed = 0; // track time in ms
-  unsigned long playStartMillis = 0;
-  unsigned long manualElapsedOverride = 0;
-
-  void playCurrentFile(); // Helper to play file at currentFileIndex
 };
