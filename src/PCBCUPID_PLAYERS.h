@@ -25,7 +25,7 @@ enum PlayerState {
   PAUSED
 };
 
-class PCBCUPID_PLAYERS
+class PCBCUPID_PLAYERS //change to PLAYER
 {
 public:
     PCBCUPID_PLAYERS(TwoWire &wire);
@@ -44,11 +44,12 @@ public:
 
     // Volume control
     void setVolume(float volume);
-    float getVolume() const;
+    float getVolume() const;  // will always return 100
     void setAutoFade(bool enable);
 
     // Track navigation
-    bool playTrack(int index);
+    bool playTrack(const char* filename); // playTrack("filename") once the audio is done, stop the player. 
+    void playTrackAtIndex(int index); //pass index to play the sound
     int currentTrackIndex() const;
     int getTrackCount() const { return trackList.size(); }
     int trackCount() const { return trackList.size(); }
@@ -68,7 +69,6 @@ public:
 
 private:
     // Internal state
-    enum PlayerState { STOPPED, PLAYING, PAUSED };
     PlayerState state = STOPPED;
     float volume = 0.5f;  // Default volume (0.0 to 1.0)
     
@@ -105,7 +105,6 @@ private:
 
     // Internal methods
     void buildPlaylist(const char *ext);
-    void playTrackAtIndex(int index);
     void playCurrentTrack();
     void resetPlayTime();
     

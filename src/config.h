@@ -14,4 +14,4 @@
 
 /*Default File Path & Extension*/
 #define AUDIO_START_PATH "/"
-#define AUDIO_FILE_EXTENSION "aac"  // Changeable: "mp3", "wav", "aac", "ogg"
+#define AUDIO_FILE_EXTENSION "mp3"  // Changeable: "mp3", "wav", "aac", "ogg"

@@ -4,7 +4,7 @@
 
 PCBCUPID_PLAYERS player(Wire);  // Your custom I2Cbus
 
-float vol = 0.5;  //volume can be set by the dev user
+float vol = 0.5;  //volume can be set between 1 - 0.5
 
 
 void setup() {
