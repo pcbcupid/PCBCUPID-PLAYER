@@ -1,23 +1,27 @@
-#include "PCBCUPID_PLAYERS.h"
+#include "PCBCUPID_PLAYER.h"
 
-PCBCUPID_PLAYERS::PCBCUPID_PLAYERS(TwoWire &w)
-    : wire(w), nau8325_control(w), i2s(new audio_tools::I2SStream()) {}
+AUDIO_PLAYER::AUDIO_PLAYER(TwoWire &w, const AudioPlayerConfig &cfg)
+    : wire(w), config(cfg), nau8325_control(w), i2s(new audio_tools::I2SStream()) {}
 
-PCBCUPID_PLAYERS::~PCBCUPID_PLAYERS() {
+AUDIO_PLAYER::~AUDIO_PLAYER()
+{
     // Clean up audio player
-    if (player) {
+    if (player)
+    {
         delete player;
         player = nullptr;
     }
-    
+
     // Clean up audio source
-    if (source) {
+    if (source)
+    {
         delete source;
         source = nullptr;
     }
-    
+
     // Clean up info handler
-    if (infoHandler) {
+    if (infoHandler)
+    {
         delete infoHandler;
         infoHandler = nullptr;
     }
@@ -25,118 +29,174 @@ PCBCUPID_PLAYERS::~PCBCUPID_PLAYERS() {
 
 /*Intialization*/
 
-void PCBCUPID_PLAYERS::begin(const char *ext) {
+void AUDIO_PLAYER::begin(const char *ext)
+{
     // Initialize logging
     AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Info);
     delay(300);
     nau8325_control.powerOn();
 
-    // Initialize SD card
-    SPI.begin(SD_SCK, SD_MISO, SD_MOSI);
-    if (!SD.begin(SD_CS, SPI)) {
+    // Initialize SD card with configured pins
+    SPI.begin(config.sd_sck, config.sd_miso, config.sd_mosi);
+    if (!SD.begin(config.sd_cs, SPI))
+    {
         Serial.println("SD mount failed!");
         while (true); // Halt on SD card failure
     }
 
     // Build playlist
     buildPlaylist(ext);
-    
-    // Configure I2S
+
+    // List all available tracks after initialization
+    listTracks();
+
+    // Configure I2S with configured pins
     auto cfg = i2s->defaultConfig(TX_MODE);
     cfg.sample_rate = 44100;
     cfg.bits_per_sample = 16;
     cfg.channels = 2;
-    cfg.pin_bck = I2S_BCLK;
-    cfg.pin_ws = I2S_WS;
-    cfg.pin_data = I2S_DOUT;
-    cfg.pin_mck = I2S_MCLK;
+    cfg.pin_bck = config.i2s_bclk;
+    cfg.pin_ws = config.i2s_ws;
+    cfg.pin_data = config.i2s_dout;
+    cfg.pin_mck = config.i2s_mclk;
     i2s->begin(cfg);
-    
-    // Initialize audio source
-    source = new AudioSourceSD(AUDIO_START_PATH, ext, SD_CS);
-    
+
+    // Initialize audio source with configured CS pin
+    source = new AudioSourceSD(config.audio_start_path, ext, config.sd_cs);
+
     // Initialize audio decoder based on file extension
     AudioDecoder *decoder = nullptr;
     String extStr = String(ext);
     extStr.toLowerCase();
-    
-    if (extStr == "mp3") {
+
+    if (extStr == "mp3")
+    {
         Serial.println("Initializing MP3 decoder...");
         decoder = &mp3;
-    } else if (extStr == "wav") {
+    }
+    else if (extStr == "wav")
+    {
         Serial.println("Initializing WAV decoder...");
         decoder = &wav;
-    } else if (extStr == "ogg") {
+    }
+    else if (extStr == "ogg")
+    {
         Serial.println("Initializing OGG decoder...");
         decoder = &ogg;
-    } else if (extStr == "aac" || extStr == "m4a") {
+    }
+    else if (extStr == "aac" || extStr == "m4a")
+    {
         Serial.println("Initializing AAC decoder...");
         decoder = &aac;
-    } else {
+    }
+    else
+    {
         Serial.println("Unsupported file extension: " + String(ext));
     }
 
-    if (!decoder) {
+    if (!decoder)
+    {
         Serial.println("No suitable decoder found for extension: " + String(ext));
         return;
     }
-    
+
     // Initialize audio player
     player = new AudioPlayer(*source, *i2s, *decoder);
     infoHandler = new InfoHandler(nau8325, i2s, &nau8325_control);
     player->setMetadataCallback(printMetaData);
     player->addNotifyAudioChange(infoHandler);
-    
+
     // Set initial volume
     player->setVolume(volume);
-    
+
     // Begin playback
     player->begin();
+
     
-    // Start playback
-    playCurrentTrack();
 }
 
 /*Helper Method*/
-void PCBCUPID_PLAYERS::buildPlaylist(const char *ext) {
-    File dir = SD.open(AUDIO_START_PATH);
-    if (!dir || !dir.isDirectory()) {
+void AUDIO_PLAYER::buildPlaylist(const char *ext)
+{
+    File dir = SD.open(config.audio_start_path);
+    if (!dir || !dir.isDirectory())
+    {
         Serial.println("Invalid audio directory!");
         return;
     }
-    
+
     trackList.clear();
     File file;
-    while ((file = dir.openNextFile())) {
+    while ((file = dir.openNextFile()))
+    {
         String fname = file.name();
-        if (!file.isDirectory() && fname.endsWith("." + String(ext))) {
-            trackList.push_back(String(AUDIO_START_PATH) + "/" + fname);
+        if (!file.isDirectory() && fname.endsWith("." + String(ext)))
+        {
+            // Strip leading "//" if present
+            if (fname.startsWith("//"))
+            {
+                fname = fname.substring(2); // remove the first two characters
+            }
+            // Add to track list
+            String fullPath = String(config.audio_start_path) + "/" + fname;
+            //Validate the file by checking if it can be opened and has content
+            File testFile = SD.open(fullPath.c_str());
+            if (!testFile || testFile.isDirectory())
+            {
+                Serial.println("Invalid audio file!");
+                return;
+            }
+            if(testFile && testFile.size() > 0)
+            {
+                trackList.push_back(fullPath);
+                Serial.print("Added to the playList");
+                Serial.println(fname);
+            }
+            else
+            {
+                Serial.print("SkippingInvalid/corrupted audio file: ");
+                Serial.println(fname);
+            }
+            testFile.close();
         }
         file.close();
     }
     dir.close();
+
+    // List all available tracks after building playlist
+    listTracks();
 }
 
-AudioDecoder* PCBCUPID_PLAYERS::getAudioDecoder(const char *ext) {
-    if (strcasecmp(ext, "mp3") == 0) return &mp3;
-    if (strcasecmp(ext, "wav") == 0) return &wav;
-    if (strcasecmp(ext, "ogg") == 0) return &ogg;
-    if (strcasecmp(ext, "aac") == 0) return &aac;
+AudioDecoder *AUDIO_PLAYER::getAudioDecoder(const char *ext)
+{
+    if (strcasecmp(ext, "mp3") == 0)
+        return &mp3;
+    if (strcasecmp(ext, "wav") == 0)
+        return &wav;
+    if (strcasecmp(ext, "ogg") == 0)
+        return &ogg;
+    if (strcasecmp(ext, "aac") == 0)
+        return &aac;
     return nullptr;
 }
 
 /*Main Loop*/
-void PCBCUPID_PLAYERS::loop() {
-    if (player) {
+void AUDIO_PLAYER::loop()
+{
+    if (player)
+    {
         player->copy();
     }
 }
 
 /*Playback control*/
-void PCBCUPID_PLAYERS::play() {
-    if (!player) return;
-    
-    if (state == STOPPED) {
+void AUDIO_PLAYER::play()
+{
+    if (!player)
+        return;
+
+    if (state == STOPPED)
+    {
         // Start playing from the beginning if stopped
         playCurrentTrack();
         state = PLAYING;
@@ -145,8 +205,9 @@ void PCBCUPID_PLAYERS::play() {
         lastCommandWasStop = false;
         return;
     }
-    
-    if (paused && state == PAUSED) {
+
+    if (paused && state == PAUSED)
+    {
         // Resume playback from pause
         unsigned long resumeTime = millis();
         totalPausedMillis += resumeTime - pauseStartMillis;
@@ -156,9 +217,11 @@ void PCBCUPID_PLAYERS::play() {
     }
 }
 
-void PCBCUPID_PLAYERS::pause() {
-    if (!player || paused) return;
-    
+void AUDIO_PLAYER::pause()
+{
+    if (!player || paused)
+        return;
+
     // Pause the current playback
     player->stop();
     paused = true;
@@ -166,8 +229,10 @@ void PCBCUPID_PLAYERS::pause() {
     pauseStartMillis = millis();
 }
 
-void PCBCUPID_PLAYERS::stop() {
-    if (player) {
+void AUDIO_PLAYER::stop()
+{
+    if (player)
+    {
         player->stop();
     }
 
@@ -180,11 +245,12 @@ void PCBCUPID_PLAYERS::stop() {
     lastCommandWasStop = true;
 }
 
-
 /*Track Navigation*/
 
-void PCBCUPID_PLAYERS::next() {
-    if (trackList.empty()) return;
+void AUDIO_PLAYER::next()
+{
+    if (trackList.empty())
+        return;
 
     trackIndex = (trackIndex + 1) % trackList.size();
     playCurrentTrack();
@@ -196,9 +262,10 @@ void PCBCUPID_PLAYERS::next() {
     lastCommandWasStop = false;
 }
 
-
-void PCBCUPID_PLAYERS::previous() {
-    if (trackList.empty()) return;
+void AUDIO_PLAYER::previous()
+{
+    if (trackList.empty())
+        return;
 
     trackIndex = (trackIndex - 1 + trackList.size()) % trackList.size();
     playCurrentTrack();
@@ -209,153 +276,168 @@ void PCBCUPID_PLAYERS::previous() {
     lastCommandWasStop = false;
 }
 
-
-
-void PCBCUPID_PLAYERS::playTrackAtIndex(int index) {
-    if (trackList.empty() || !player || !source)
-        return;
-    if (index < 0 || index >= (int)trackList.size())
-        return;
-
-    trackIndex = index;
-    playCurrentTrack();
-
-    state = PLAYING;
-    paused = false;
-    stopped = false;
-    lastCommandWasStop = false;
-}
-
-
-bool PCBCUPID_PLAYERS::playTrack(int index) {
+bool AUDIO_PLAYER::playTrackIndex(int index)
+{
     // Check if the index is valid
-    if (index < 0 || index >= (int)trackList.size()) {
+    if (trackList.empty() || index < 0 || index >= (int)trackList.size())
+    {
         Serial.printf("Error: Invalid track index %d (valid range: 0-%d)\n", index, trackList.size() - 1);
         return false;
     }
 
+    if (!player || !source)
+    {
+        Serial.println("Player or source not initialized.");
+        return false;
+    }
+
     // Stop current playback if any
-    if (player) {
+    if (player)
+    {
         player->stop();
     }
 
     // Update the track index
     trackIndex = index;
-  
+
     // Play the selected track
     playCurrentTrack();
-  
+
     // Update the player state
     state = PLAYING;
     paused = false;
     stopped = false;
     lastCommandWasStop = false;
-  
+
     return true;
 }
 
 /*Volume Control*/
 
-void PCBCUPID_PLAYERS::setVolume(float vol) {
+void AUDIO_PLAYER::setVolume(float vol)
+{
     volume = constrain(vol, 0.0f, 1.0f);
-    if (player) {
+    if (player)
+    {
         player->setVolume(volume);
     }
 }
 
-float PCBCUPID_PLAYERS::getVolume() const {
+float AUDIO_PLAYER::getVolume() const
+{
     return volume;
 }
 
-void PCBCUPID_PLAYERS::setAutoFade(bool enable) {
+void AUDIO_PLAYER::setAutoFade(bool enable)
+{
     if (player)
         player->setAutoFade(enable);
 }
 
 /*Status and Information*/
-String PCBCUPID_PLAYERS::currentTrackName() const {
+String AUDIO_PLAYER::currentTrackName() const
+{
     return trackList.empty() ? "" : trackList[trackIndex];
 }
 
-bool PCBCUPID_PLAYERS::isPlaying() const {
+bool AUDIO_PLAYER::isPlaying() const
+{
     return player && player->isActive();
 }
 
-bool PCBCUPID_PLAYERS::isPaused() const {
+bool AUDIO_PLAYER::isPaused() const
+{
     return state == PAUSED;
 }
 
-bool PCBCUPID_PLAYERS::isStopped() const {
+bool AUDIO_PLAYER::isStopped() const
+{
     return state == STOPPED;
 }
 
 /*Playback Position and Duration*/
-unsigned long PCBCUPID_PLAYERS::currentTrackElapsedMillis() const {
-    if (state == STOPPED) return 0;
-    if (state == PAUSED) return pauseStartMillis - playStartMillis - totalPausedMillis;
+unsigned long AUDIO_PLAYER::currentTrackElapsedMillis() const
+{
+    if (state == STOPPED)
+        return 0;
+    if (state == PAUSED)
+        return pauseStartMillis - playStartMillis - totalPausedMillis;
     return millis() - playStartMillis - totalPausedMillis;
 }
 
-unsigned long PCBCUPID_PLAYERS::currentTrackElapsedSeconds() const {
+unsigned long AUDIO_PLAYER::currentTrackElapsedSeconds() const
+{
     return currentTrackElapsedMillis() / 1000;
 }
 
-unsigned long PCBCUPID_PLAYERS::currentTrackDurationMillis() const {
+unsigned long AUDIO_PLAYER::currentTrackDurationMillis() const
+{
     return currentTrackDurationSeconds() * 1000;
 }
 
-unsigned long PCBCUPID_PLAYERS::currentTrackDurationSeconds() const {
-    if (trackList.empty() || trackIndex < 0 || trackIndex >= trackList.size()) {
+unsigned long AUDIO_PLAYER::currentTrackDurationSeconds() const
+{
+    if (trackList.empty() || trackIndex < 0 || trackIndex >= trackList.size())
+    {
         return 0;
     }
     return calculateTrackDuration(trackList[trackIndex]);
 }
 
 /*Audio Information*/
-unsigned long PCBCUPID_PLAYERS::currentTrackPositionBytes() const {
-    if (!player) return 0;
+unsigned long AUDIO_PLAYER::currentTrackPositionBytes() const
+{
+    if (!player)
+        return 0;
     AudioInfo info = infoHandler->lastInfo;
     unsigned long elapsed = currentTrackElapsedSeconds();
     return (info.sample_rate * info.bits_per_sample * info.channels * elapsed) / 8;
 }
 
-unsigned long PCBCUPID_PLAYERS::currentTrackTotalBytes() const {
+unsigned long AUDIO_PLAYER::currentTrackTotalBytes() const
+{
     String filename = currentTrackName();
     File f = SD.open(filename);
-    if (!f) return 1;
+    if (!f)
+        return 1;
     unsigned long size = f.size();
     f.close();
     return size;
 }
 
-audio_tools::AudioPlayer* PCBCUPID_PLAYERS::audioPlayer() {
+audio_tools::AudioPlayer *AUDIO_PLAYER::audioPlayer()
+{
     return player;
 }
 
-AudioInfo PCBCUPID_PLAYERS::audioInfo() const {
+AudioInfo AUDIO_PLAYER::audioInfo() const
+{
     return infoHandler ? infoHandler->lastInfo : AudioInfo();
 }
 
-void PCBCUPID_PLAYERS::resetPlayTime()
+void AUDIO_PLAYER::resetPlayTime()
 {
-  playStartMillis = millis();
-  totalPausedMillis = 0;
+    playStartMillis = millis();
+    totalPausedMillis = 0;
 }
 
-int PCBCUPID_PLAYERS::currentTrackIndex() const
+int AUDIO_PLAYER::currentTrackIndex() const
 {
-  return trackIndex;
+    return trackIndex;
 }
 
 /*Track Playback (Internal)*/
-void PCBCUPID_PLAYERS::playCurrentTrack() {
-    if (trackList.empty() || trackIndex < 0 || trackIndex >= (int)trackList.size()) {
+void AUDIO_PLAYER::playCurrentTrack()
+{
+    if (trackList.empty() || trackIndex < 0 || trackIndex >= (int)trackList.size())
+    {
         Serial.println("Track index out of bounds.");
         return;
     }
 
     String filepath = trackList[trackIndex];
-    if (!source || !player) {
+    if (!source || !player)
+    {
         Serial.println("Player or source not initialized.");
         return;
     }
@@ -365,8 +447,8 @@ void PCBCUPID_PLAYERS::playCurrentTrack() {
 
     player->stop();
 
-    source->setIndex(trackIndex);  // use index based source selection
-    player->begin(trackIndex);     // begin playback from that index
+    source->setIndex(trackIndex); // use index based source selection
+    player->begin(trackIndex);    // begin playback from that index
 
     resetPlayTime();
     paused = false;
@@ -374,7 +456,8 @@ void PCBCUPID_PLAYERS::playCurrentTrack() {
     state = PLAYING;
 
     unsigned long durationSec = calculateTrackDuration(filepath);
-    if (durationSec == 0) {
+    if (durationSec == 0)
+    {
         durationSec = 180;
     }
 
@@ -386,7 +469,8 @@ void PCBCUPID_PLAYERS::playCurrentTrack() {
 }
 
 /*Audio Info Handlers*/
-void PCBCUPID_PLAYERS::InfoHandler::setAudioInfo(AudioInfo info) {
+void AUDIO_PLAYER::InfoHandler::setAudioInfo(AudioInfo info)
+{
     Serial.printf("Audio Changed: fs=%d, bits=%d\n", info.sample_rate, info.bits_per_sample);
     nau8325_control->begin(info.sample_rate, info.bits_per_sample);
     nau8325_control->powerOn();
@@ -394,7 +478,8 @@ void PCBCUPID_PLAYERS::InfoHandler::setAudioInfo(AudioInfo info) {
     lastInfo = info;
 }
 
-void PCBCUPID_PLAYERS::printMetaData(MetaDataType type, const char *str, int len) {
+void AUDIO_PLAYER::printMetaData(MetaDataType type, const char *str, int len)
+{
     Serial.print("==> ");
     Serial.print(toStr(type));
     Serial.print(": ");
@@ -404,37 +489,45 @@ void PCBCUPID_PLAYERS::printMetaData(MetaDataType type, const char *str, int len
 /*Duration Calculation*/
 
 // Parses MP3 duration via ID3 TLEN or VBR header
-unsigned long PCBCUPID_PLAYERS::calculateTrackDuration(const String &filename) const {
+unsigned long AUDIO_PLAYER::calculateTrackDuration(const String &filename) const
+{
     File f = SD.open(filename);
-    if (!f) return 0;
-    
+    if (!f)
+        return 0;
+
     size_t fileSize = f.size();
     unsigned long duration = 0;
-    
+
     // Handle MP3 files
-    if (filename.endsWith(".mp3")) {
+    if (filename.endsWith(".mp3"))
+    {
         // Skip ID3v2 header if present
         uint8_t hdr[10];
         f.read(hdr, 10);
-        if (hdr[0] == 'I' && hdr[1] == 'D' && hdr[2] == '3') {
+        if (hdr[0] == 'I' && hdr[1] == 'D' && hdr[2] == '3')
+        {
             // Parse ID3v2 header size (stored as synchsafe integer)
-            uint32_t sz = ((hdr[6] & 0x7F) << 21) | 
-                         ((hdr[7] & 0x7F) << 14) | 
-                         ((hdr[8] & 0x7F) << 7) | 
-                         (hdr[9] & 0x7F);
+            uint32_t sz = ((hdr[6] & 0x7F) << 21) |
+                          ((hdr[7] & 0x7F) << 14) |
+                          ((hdr[8] & 0x7F) << 7) |
+                          (hdr[9] & 0x7F);
             f.seek(10 + sz);
-        } else {
+        }
+        else
+        {
             f.seek(0);
         }
 
         // Read MP3 frame header
         uint8_t frame[4];
         f.read(frame, 4);
-        
+
         // Check for valid MP3 frame sync
-        if (frame[0] == 0xFF && (frame[1] & 0xE0) == 0xE0) {
+        if (frame[0] == 0xFF && (frame[1] & 0xE0) == 0xE0)
+        {
             int kbps = parseMP3Bitrate(frame);
-            if (kbps > 0) {
+            if (kbps > 0)
+            {
                 duration = (fileSize * 8UL) / (kbps * 1000UL);
             }
         }
@@ -442,17 +535,21 @@ unsigned long PCBCUPID_PLAYERS::calculateTrackDuration(const String &filename) c
         // Check for Xing/VBRI header for more accurate duration
         f.read(frame, 4);
         String tag = String((char *)frame);
-        
-        if (tag == "Xing" || tag == "Info") {
+
+        if (tag == "Xing" || tag == "Info")
+        {
             // Seek and extract total frames/count for better duration
             f.read(frame, 4);
             uint32_t frames = (frame[0] << 24) | (frame[1] << 16) | (frame[2] << 8) | frame[3];
-            if (frames > 0) {
+            if (frames > 0)
+            {
                 AudioInfo info = player->audioInfo();
                 unsigned long spf = info.sample_rate / 1152; // samples per frame for MPEG
                 duration = frames * spf / info.sample_rate;
             }
-        } else if (tag == "VBRI") {
+        }
+        else if (tag == "VBRI")
+        {
             f.seek(f.position() + 14);
             uint8_t ct[4];
             f.read(ct, 4);
@@ -461,20 +558,23 @@ unsigned long PCBCUPID_PLAYERS::calculateTrackDuration(const String &filename) c
             unsigned long spf = info.sample_rate / 1152;
             duration = frames * spf / info.sample_rate;
         }
-    } 
+    }
     // Handle WAV files
-    else if (filename.endsWith(".wav")) {
+    else if (filename.endsWith(".wav"))
+    {
         duration = parseWAVDuration(f);
     }
     // Handle OGG files
-    else if (filename.endsWith(".ogg")) {
+    else if (filename.endsWith(".ogg"))
+    {
         duration = parseOGGDuration(f);
     }
     // For other formats, use bitrate estimation
-    else {
+    else
+    {
         duration = estimateBitrateBased(f, fileSize);
     }
-    
+
     f.close();
     return duration;
 }
@@ -486,20 +586,18 @@ unsigned long PCBCUPID_PLAYERS::calculateTrackDuration(const String &filename) c
  * @param header Pointer to 4-byte MP3 frame header
  * @return Bitrate in kbps, or 0 if invalid
  */
-int PCBCUPID_PLAYERS::parseMP3Bitrate(const uint8_t *header) const {
+int AUDIO_PLAYER::parseMP3Bitrate(const uint8_t *header) const
+{
     // Bitrate lookup table [version][layer][bitrate_index]
     const int bitrateTable[2][3][16] = {
-        {   // MPEG Version 2 & 2.5
-            {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
-            {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
-            {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}
-        },
-        {   // MPEG Version 1
-            {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0},
-            {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0},
-            {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}
-        }
-    };
+        {// MPEG Version 2 & 2.5
+         {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
+         {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0},
+         {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}},
+        {// MPEG Version 1
+         {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0},
+         {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0},
+         {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}}};
 
     // Extract header fields
     uint8_t versionBits = (header[1] >> 3) & 0x03;
@@ -520,12 +618,14 @@ int PCBCUPID_PLAYERS::parseMP3Bitrate(const uint8_t *header) const {
  * @param file Reference to opened WAV file
  * @return Duration in seconds, or 0 if invalid
  */
-unsigned long PCBCUPID_PLAYERS::parseWAVDuration(File &file) const {
+unsigned long AUDIO_PLAYER::parseWAVDuration(File &file) const
+{
     // Read sample rate
     file.seek(24);
     uint32_t sampleRate = 0;
     file.read((uint8_t *)&sampleRate, 4);
-    if (sampleRate == 0) return 0;
+    if (sampleRate == 0)
+        return 0;
 
     // Read number of channels
     file.seek(22);
@@ -554,33 +654,38 @@ unsigned long PCBCUPID_PLAYERS::parseWAVDuration(File &file) const {
  * @param file Reference to opened OGG file
  * @return Duration in seconds, or 0 if invalid
  */
-unsigned long PCBCUPID_PLAYERS::parseOGGDuration(File &file) const {
+unsigned long AUDIO_PLAYER::parseOGGDuration(File &file) const
+{
     const size_t fileSize = file.size();
     const size_t scanSize = 2048; // How much of the end to scan for OggS
-    const size_t minOffset = 32;   // Minimum possible OggS header size
+    const size_t minOffset = 32;  // Minimum possible OggS header size
 
     // Start scanning from the end of the file
     size_t startPos = (fileSize > scanSize) ? (fileSize - scanSize) : 0;
-    
-    for (size_t i = startPos; i < fileSize - minOffset; i++) {
+
+    for (size_t i = startPos; i < fileSize - minOffset; i++)
+    {
         file.seek(i);
-        
+
         // Look for OggS signature
         char sig[4];
-        if (file.read((uint8_t *)sig, 4) != 4) continue;
-        
-        if (memcmp(sig, "OggS", 4) == 0) {
+        if (file.read((uint8_t *)sig, 4) != 4)
+            continue;
+
+        if (memcmp(sig, "OggS", 4) == 0)
+        {
             // Found OggS header, read granule position
             file.seek(i + 6);
             uint64_t granule = 0;
-            if (file.read((uint8_t *)&granule, 8) != 8) continue;
-            
+            if (file.read((uint8_t *)&granule, 8) != 8)
+                continue;
+
             // Use standard sample rate (most common is 44100)
             const uint32_t sampleRate = 44100;
             return (sampleRate > 0) ? (granule / sampleRate) : 0;
         }
     }
-    
+
     return 0; // No valid OggS header found
 }
 
@@ -592,13 +697,48 @@ unsigned long PCBCUPID_PLAYERS::parseOGGDuration(File &file) const {
  * @param fileSize Size of the file in bytes
  * @return Estimated duration in seconds
  */
-unsigned long PCBCUPID_PLAYERS::estimateBitrateBased(File &file, size_t fileSize) const {
+unsigned long AUDIO_PLAYER::estimateBitrateBased(File &file, size_t fileSize) const
+{
     // Default to average bitrate of 192kbps for unknown formats
     const unsigned long avgBitrate = 192000; // 192kbps in bits per second
-    
+
     // Calculate duration: (file_size_in_bits) / (bitrate_in_bits_per_second)
     unsigned long duration = (fileSize * 8) / (avgBitrate ? avgBitrate : 1);
-    
+
     // Ensure minimum duration of 1 second
     return duration > 0 ? duration : 1;
+}
+
+/* List all available tracks */
+String AUDIO_PLAYER::listTracks()
+{
+    String result = "";
+
+    if (trackList.empty())
+    {
+        result = "No tracks found in the playlist.\n";
+        Serial.print(result);
+        return result;
+    }
+
+    result += "\nAvailable Tracks:\n";
+    result += "----------------\n";
+
+    for (size_t i = 0; i < trackList.size(); i++)
+    {
+        // Extract just the filename from the full path
+        String fullPath = trackList[i];
+        int lastSlash = fullPath.lastIndexOf('/');
+        String filename = (lastSlash != -1) ? fullPath.substring(lastSlash + 1) : fullPath;
+
+        // Format: " 1: filename.mp3\n"
+        char buffer[100];
+        snprintf(buffer, sizeof(buffer), "%2d: %s\n", i + 1, filename.c_str());
+        result += buffer;
+    }
+    result += "\n";
+
+    // Also print to Serial for backward compatibility
+    Serial.print(result);
+    return result;
 }

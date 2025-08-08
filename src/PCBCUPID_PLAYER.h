@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <string.h>
 #include <SPI.h>
 #include <AudioTools.h>
 #include <AudioTools/Disk/AudioSourceSD.h>
@@ -10,26 +11,46 @@
 #include <AudioTools/AudioCodecs/CodecWAV.h>
 #include <AudioTools/AudioCodecs/CodecOpusOgg.h>
 #include <AudioTools/AudioCodecs/CodecAACHelix.h>
-#include "config.h"
 #include "Driver.h"
 
+
+// Configuration structure for pins
+struct AudioPlayerConfig {
+    // SD Card SPI Configuration
+    int8_t sd_cs = 1;
+    int8_t sd_miso = 3;
+    int8_t sd_mosi = 2;
+    int8_t sd_sck = 11;
+    
+    // I2S Pins for NAU8325
+    int8_t i2s_mclk = 22;
+    int8_t i2s_bclk = 25;
+    int8_t i2s_ws = 24;
+    int8_t i2s_dout = 23;
+    
+    // Default File Path
+    const char* audio_start_path = "/";
+};
+
 // Forward declarations
-namespace audio_tools {
+namespace audio_tools
+{
     class I2SStream;
     class AudioBoardStream;
 }
 
-enum PlayerState {
-  STOPPED,
-  PLAYING,
-  PAUSED
+enum PlayerState
+{
+    STOPPED,
+    PLAYING,
+    PAUSED
 };
 
-class PCBCUPID_PLAYERS
+class AUDIO_PLAYER
 {
 public:
-    PCBCUPID_PLAYERS(TwoWire &wire);
-    ~PCBCUPID_PLAYERS();
+    AUDIO_PLAYER(TwoWire &wire, const AudioPlayerConfig &cfg = AudioPlayerConfig());
+    ~AUDIO_PLAYER();
 
     // Initialization and main loop
     void begin(const char *ext);
@@ -40,16 +61,18 @@ public:
     void pause();
     void stop();
     void next();
-    void previous();
+    void previous(); 
 
     // Volume control
     void setVolume(float volume);
     float getVolume() const;
     void setAutoFade(bool enable);
 
+    // Track listing
+    String listTracks();
+
     // Track navigation
-    bool playTrack(int index);
-    int currentTrackIndex() const;
+    bool playTrackIndex(int index);
     int getTrackCount() const { return trackList.size(); }
     int trackCount() const { return trackList.size(); }
 
@@ -62,16 +85,25 @@ public:
     unsigned long currentTrackDurationSeconds() const;
 
     // Audio info
-    audio_tools::AudioPlayer* audioPlayer();
+    audio_tools::AudioPlayer *audioPlayer();
     AudioInfo audioInfo() const;
-    AudioDecoder* getAudioDecoder(const char *ext);
+    AudioDecoder *getAudioDecoder(const char *ext);
+
+    // Amplifier control
+    void powerOnAmplifier() { nau8325_control.powerOn(); }
+    void powerOffAmplifier() { nau8325_control.powerOff(); }
 
 private:
     // Internal state
-    enum PlayerState { STOPPED, PLAYING, PAUSED };
+    enum PlayerState
+    {
+        STOPPED,
+        PLAYING,
+        PAUSED
+    };
     PlayerState state = STOPPED;
-    float volume = 0.5f;  // Default volume (0.0 to 1.0)
-    
+    float volume = 0.5f; // Default volume (0.0 to 1.0)
+
     // Track management
     std::vector<String> trackList;
     int trackIndex = 0;
@@ -85,51 +117,53 @@ private:
     bool lastCommandWasStop = false;
 
     // Audio components
-    audio_tools::I2SStream* i2s = nullptr;
-    audio_tools::AudioBoardStream* nau8325 = nullptr;
-    AudioSourceSD* source = nullptr;
-    audio_tools::AudioPlayer* player = nullptr;
-    
+    audio_tools::I2SStream *i2s = nullptr;
+    audio_tools::AudioBoardStream *nau8325 = nullptr;
+    AudioSourceSD *source = nullptr;
+    audio_tools::AudioPlayer *player = nullptr;
+
     // Info handler
-    class InfoHandler : public AudioInfoSupport {
-        audio_tools::I2SStream* i2s = nullptr;
-        audio_tools::AudioBoardStream* nau8325 = nullptr;
-        PCBCUPID_NAU8325* nau8325_control = nullptr;
+    class InfoHandler : public AudioInfoSupport
+    {
+        audio_tools::I2SStream *i2s = nullptr;
+        audio_tools::AudioBoardStream *nau8325 = nullptr;
+        PCBCUPID_NAU8325 *nau8325_control = nullptr;
+
     public:
         AudioInfo lastInfo;
-        InfoHandler(audio_tools::AudioBoardStream* a, audio_tools::I2SStream* i, PCBCUPID_NAU8325* control) 
+        InfoHandler(audio_tools::AudioBoardStream *a, audio_tools::I2SStream *i, PCBCUPID_NAU8325 *control)
             : nau8325(a), i2s(i), nau8325_control(control) {}
         void setAudioInfo(AudioInfo info) override;
-        AudioInfo audioInfo() override { return lastInfo; }  
+        AudioInfo audioInfo() override { return lastInfo; }
     } *infoHandler = nullptr;
 
     // Internal methods
     void buildPlaylist(const char *ext);
-    void playTrackAtIndex(int index);
+    int currentTrackIndex() const;
     void playCurrentTrack();
     void resetPlayTime();
-    
+
     // Duration/bitrate helpers
     unsigned long calculateTrackDuration(const String &filename) const;
     unsigned long parseWAVDuration(File &file) const;
     unsigned long parseOGGDuration(File &file) const;
     unsigned long estimateBitrateBased(File &file, size_t fileSize) const;
     int parseMP3Bitrate(const uint8_t *header) const;
-    
+
     // Internal timing methods
     unsigned long currentTrackElapsedMillis() const;
     unsigned long currentTrackDurationMillis() const;
     unsigned long currentTrackPositionBytes() const;
     unsigned long currentTrackTotalBytes() const;
-    
+
     // Metadata callback
     static void printMetaData(MetaDataType type, const char *str, int len);
-    
+
+    AudioPlayerConfig config;
     TwoWire &wire;
     MP3DecoderHelix mp3;
     WAVDecoder wav;
     OpusOggDecoder ogg;
     AACDecoderHelix aac;
-    PCBCUPID_NAU8325 nau8325_control;  
-
+    PCBCUPID_NAU8325 nau8325_control;
 };
