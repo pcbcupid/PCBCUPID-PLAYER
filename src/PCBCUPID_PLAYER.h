@@ -65,7 +65,7 @@ public:
 
     // Volume control
     void setVolume(float volume);
-    float getVolume() const;
+    float getVolume() const;  // will always return 100
     void setAutoFade(bool enable);
 
     // Track listing
