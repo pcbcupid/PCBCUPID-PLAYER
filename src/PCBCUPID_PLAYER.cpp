@@ -48,8 +48,6 @@ void AUDIO_PLAYER::begin(const char *ext) {
     // Power on the amplifier
       nau8325_control.powerOn();
         
-   
-
     // Initialize SD card
     SPI.begin(config.sd_sck, config.sd_miso, config.sd_mosi);
     if (!SD.begin(config.sd_cs, SPI)) {
