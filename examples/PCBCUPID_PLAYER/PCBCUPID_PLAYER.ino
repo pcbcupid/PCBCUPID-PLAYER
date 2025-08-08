@@ -6,16 +6,16 @@
 // Create configuration with default values
 AudioPlayerConfig playerConfig = {
     // SD Card Configuration
-    .sd_cs = 1,
-    .sd_miso = 3,
-    .sd_mosi = 2,
+    .sd_cs = 23,
+    .sd_miso = 25,
+    .sd_mosi = 22,
     .sd_sck = 11,
     
     // I2S Configuration
-    .i2s_mclk = 22,
-    .i2s_bclk = 25,
-    .i2s_ws = 24,
-    .i2s_dout = 23,
+    .i2s_mclk = 24,
+    .i2s_bclk = 2,
+    .i2s_ws = 1,
+    .i2s_dout = 3,
     
     // File path
     .audio_start_path = "/"
@@ -46,12 +46,13 @@ void setup()
   Serial.begin(115200);
   delay(500); // Wait for Serial monitor
 
+  Wire.begin();
+  Wire.setClock(400000); //clock frequency for fast communication
+  
   Serial.println("\nInitializing PCBCUPID Player...");
   player.begin(fileext.c_str());
   player.setVolume(vol);
   player.setAutoFade(true);
-  // Ensure amplifier is powered on
-  player.powerOnAmplifier();
   Serial.println("Waiting for user to press 'p' to start playback...");
   player.stop(); // Ensure player is stopped initially
   printHelp();

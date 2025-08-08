@@ -29,28 +29,12 @@ AUDIO_PLAYER::~AUDIO_PLAYER()
 
 /*Intialization*/
 
-void AUDIO_PLAYER::begin(const char *ext)
-{
+void AUDIO_PLAYER::begin(const char *ext) {
     // Initialize logging
     AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Info);
     delay(300);
-    nau8325_control.powerOn();
 
-    // Initialize SD card with configured pins
-    SPI.begin(config.sd_sck, config.sd_miso, config.sd_mosi);
-    if (!SD.begin(config.sd_cs, SPI))
-    {
-        Serial.println("SD mount failed!");
-        while (true); // Halt on SD card failure
-    }
-
-    // Build playlist
-    buildPlaylist(ext);
-
-    // List all available tracks after initialization
-    listTracks();
-
-    // Configure I2S with configured pins
+    // Initialize I2S first
     auto cfg = i2s->defaultConfig(TX_MODE);
     cfg.sample_rate = 44100;
     cfg.bits_per_sample = 16;
@@ -61,58 +45,67 @@ void AUDIO_PLAYER::begin(const char *ext)
     cfg.pin_mck = config.i2s_mclk;
     i2s->begin(cfg);
 
-    // Initialize audio source with configured CS pin
-    source = new AudioSourceSD(config.audio_start_path, ext, config.sd_cs);
+    // Power on the amplifier
+      nau8325_control.powerOn();
+        
+   
 
-    // Initialize audio decoder based on file extension
+    // Initialize SD card
+    SPI.begin(config.sd_sck, config.sd_miso, config.sd_mosi);
+    if (!SD.begin(config.sd_cs, SPI)) {
+        Serial.println("SD mount failed!");
+        while (true);
+    }
+
+    // Initialize audio source before building playlist
+    source = new AudioSourceSD(config.audio_start_path, ext, config.sd_cs);
+    if (!source) {
+        Serial.println("Failed to create audio source!");
+        return;
+    }
+
+    // Initialize decoder
     AudioDecoder *decoder = nullptr;
     String extStr = String(ext);
     extStr.toLowerCase();
 
-    if (extStr == "mp3")
-    {
-        Serial.println("Initializing MP3 decoder...");
+    if (extStr == "mp3") {
         decoder = &mp3;
-    }
-    else if (extStr == "wav")
-    {
-        Serial.println("Initializing WAV decoder...");
+    } else if (extStr == "wav") {
         decoder = &wav;
-    }
-    else if (extStr == "ogg")
-    {
-        Serial.println("Initializing OGG decoder...");
+    } else if (extStr == "ogg") {
         decoder = &ogg;
-    }
-    else if (extStr == "aac" || extStr == "m4a")
-    {
-        Serial.println("Initializing AAC decoder...");
+    } else if (extStr == "aac" || extStr == "m4a") {
         decoder = &aac;
     }
-    else
-    {
-        Serial.println("Unsupported file extension: " + String(ext));
-    }
 
-    if (!decoder)
-    {
-        Serial.println("No suitable decoder found for extension: " + String(ext));
+    if (!decoder) {
+        Serial.println("Unsupported file extension: " + String(ext));
         return;
     }
 
-    // Initialize audio player
+    // Create and configure the player
     player = new AudioPlayer(*source, *i2s, *decoder);
+    if (!player) {
+        Serial.println("Failed to create audio player!");
+        return;
+    }
+
     infoHandler = new InfoHandler(nau8325, i2s, &nau8325_control);
     player->setMetadataCallback(printMetaData);
     player->addNotifyAudioChange(infoHandler);
-
-    // Set initial volume
     player->setVolume(volume);
 
-    // Begin playback
-    player->begin();
+    //Build playlist after everything is initialized
+    buildPlaylist(ext);
+    listTracks();
 
-    
+    // Start playback if there are tracks
+    if (trackList.size() > 0) {
+        player->begin();
+    } else {
+        Serial.println("No tracks found with extension: " + String(ext));
+    }
 }
 
 /*Helper Method*/
