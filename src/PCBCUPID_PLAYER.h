@@ -65,7 +65,7 @@ public:
 
     // Volume control
     void setVolume(float volume);
-    float getVolume() const;  // will always return 100
+    int getVolume() const { return int (volume * 100.0f);} 
     void setAutoFade(bool enable);
 
     // Track listing
@@ -93,6 +93,20 @@ public:
     void powerOnAmplifier() { nau8325_control.powerOn(); }
     void powerOffAmplifier() { nau8325_control.powerOff(); }
 
+     // Track management
+    std::vector<String> trackList;
+    int trackIndex = 0;
+
+     int currentTrackIndex() const {return trackIndex; } //UI uses it 
+
+     /*to retrieve track name by index*/
+      String getTrackNameAt(int index) const {
+        if (index >= 0 && index < (int)trackList.size()) {
+            return trackList[index];
+        }
+        return "";
+    }
+
 private:
     // Internal state
     enum PlayerState
@@ -104,10 +118,7 @@ private:
     PlayerState state = STOPPED;
     float volume = 0.5f; // Default volume (0.0 to 1.0)
 
-    // Track management
-    std::vector<String> trackList;
-    int trackIndex = 0;
-
+   
     // Timing
     unsigned long playStartMillis = 0;
     unsigned long pauseStartMillis = 0;
@@ -139,7 +150,6 @@ private:
 
     // Internal methods
     void buildPlaylist(const char *ext);
-    int currentTrackIndex() const;
     void playCurrentTrack();
     void resetPlayTime();
 

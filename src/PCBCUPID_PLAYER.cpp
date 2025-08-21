@@ -29,7 +29,8 @@ AUDIO_PLAYER::~AUDIO_PLAYER()
 
 /*Intialization*/
 
-void AUDIO_PLAYER::begin(const char *ext) {
+void AUDIO_PLAYER::begin(const char *ext)
+{
     // Initialize logging
     AudioToolsLogger.begin(Serial, AudioToolsLogLevel::Info);
     delay(300);
@@ -46,20 +47,21 @@ void AUDIO_PLAYER::begin(const char *ext) {
     i2s->begin(cfg);
 
     // Power on the amplifier
-      nau8325_control.powerOn();
-        
-   
+    nau8325_control.powerOn();
 
     // Initialize SD card
     SPI.begin(config.sd_sck, config.sd_miso, config.sd_mosi);
-    if (!SD.begin(config.sd_cs, SPI)) {
+    if (!SD.begin(config.sd_cs, SPI))
+    {
         Serial.println("SD mount failed!");
-        while (true);
+        while (true)
+            ;
     }
 
     // Initialize audio source before building playlist
     source = new AudioSourceSD(config.audio_start_path, ext, config.sd_cs);
-    if (!source) {
+    if (!source)
+    {
         Serial.println("Failed to create audio source!");
         return;
     }
@@ -69,24 +71,33 @@ void AUDIO_PLAYER::begin(const char *ext) {
     String extStr = String(ext);
     extStr.toLowerCase();
 
-    if (extStr == "mp3") {
+    if (extStr == "mp3")
+    {
         decoder = &mp3;
-    } else if (extStr == "wav") {
+    }
+    else if (extStr == "wav")
+    {
         decoder = &wav;
-    } else if (extStr == "ogg") {
+    }
+    else if (extStr == "ogg")
+    {
         decoder = &ogg;
-    } else if (extStr == "aac" || extStr == "m4a") {
+    }
+    else if (extStr == "aac" || extStr == "m4a")
+    {
         decoder = &aac;
     }
 
-    if (!decoder) {
+    if (!decoder)
+    {
         Serial.println("Unsupported file extension: " + String(ext));
         return;
     }
 
     // Create and configure the player
     player = new AudioPlayer(*source, *i2s, *decoder);
-    if (!player) {
+    if (!player)
+    {
         Serial.println("Failed to create audio player!");
         return;
     }
@@ -96,14 +107,17 @@ void AUDIO_PLAYER::begin(const char *ext) {
     player->addNotifyAudioChange(infoHandler);
     player->setVolume(volume);
 
-    //Build playlist after everything is initialized
+    // Build playlist after everything is initialized
     buildPlaylist(ext);
     listTracks();
 
     // Start playback if there are tracks
-    if (trackList.size() > 0) {
+    if (trackList.size() > 0)
+    {
         player->begin();
-    } else {
+    }
+    else
+    {
         Serial.println("No tracks found with extension: " + String(ext));
     }
 }
@@ -132,14 +146,14 @@ void AUDIO_PLAYER::buildPlaylist(const char *ext)
             }
             // Add to track list
             String fullPath = String(config.audio_start_path) + "/" + fname;
-            //Validate the file by checking if it can be opened and has content
+            // Validate the file by checking if it can be opened and has content
             File testFile = SD.open(fullPath.c_str());
             if (!testFile || testFile.isDirectory())
             {
                 Serial.println("Invalid audio file!");
                 return;
             }
-            if(testFile && testFile.size() > 0)
+            if (testFile && testFile.size() > 0)
             {
                 trackList.push_back(fullPath);
                 Serial.print("Added to the playList");
@@ -316,10 +330,10 @@ void AUDIO_PLAYER::setVolume(float vol)
     }
 }
 
-float AUDIO_PLAYER::getVolume() const
-{
-    return volume;
-}
+// int AUDIO_PLAYER::getVolume() const
+// {
+//     return int(volume * 100.0f); // Return volume as an integer percentage
+// }
 
 void AUDIO_PLAYER::setAutoFade(bool enable)
 {
@@ -414,10 +428,10 @@ void AUDIO_PLAYER::resetPlayTime()
     totalPausedMillis = 0;
 }
 
-int AUDIO_PLAYER::currentTrackIndex() const
-{
-    return trackIndex;
-}
+// int AUDIO_PLAYER::currentTrackIndex() const
+// {
+//     return trackIndex;
+// }
 
 /*Track Playback (Internal)*/
 void AUDIO_PLAYER::playCurrentTrack()
@@ -440,8 +454,10 @@ void AUDIO_PLAYER::playCurrentTrack()
 
     player->stop();
 
-    source->setIndex(trackIndex); // use index based source selection
-    player->begin(trackIndex);    // begin playback from that index
+    // Update source index to the selected track
+    source->setIndex(trackIndex);
+    
+    //player->begin(); // begin playback
 
     resetPlayTime();
     paused = false;

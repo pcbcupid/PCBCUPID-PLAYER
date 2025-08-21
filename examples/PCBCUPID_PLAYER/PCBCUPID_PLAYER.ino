@@ -6,16 +6,16 @@
 // Create configuration with default values
 AudioPlayerConfig playerConfig = {
     // SD Card Configuration
-    .sd_cs = 23,
-    .sd_miso = 25,
-    .sd_mosi = 22,
-    .sd_sck = 11,
+    .sd_cs = 44,
+    .sd_miso = 37,
+    .sd_mosi = 36,
+    .sd_sck = 35,
     
     // I2S Configuration
-    .i2s_mclk = 24,
-    .i2s_bclk = 2,
-    .i2s_ws = 1,
-    .i2s_dout = 3,
+    .i2s_mclk = 43,
+    .i2s_bclk = 15,
+    .i2s_ws = 14,
+    .i2s_dout = 16,
     
     // File path
     .audio_start_path = "/"
@@ -54,7 +54,7 @@ void setup()
   player.setVolume(vol);
   player.setAutoFade(true);
   Serial.println("Waiting for user to press 'p' to start playback...");
-  player.stop(); // Ensure player is stopped initially
+  player.play(); // Ensure player is stopped initially
   printHelp();
 }
 
