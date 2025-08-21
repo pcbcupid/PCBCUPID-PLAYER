@@ -30,9 +30,9 @@ String fileext = "mp3";  // Default file extension (changeable e.g., wav, ogg, a
 void printHelp()
 {
   Serial.println("\n=== PCBCUPID Player Commands ===");
+  Serial.println("p - Play/Pause");
   Serial.println("n - Next track");
   Serial.println("r - Previous track");
-  Serial.println("p - Play/Pause");
   Serial.println("s - Stop");
   Serial.println("l - List all tracks");
   Serial.println("0-50 - Play track by index");
