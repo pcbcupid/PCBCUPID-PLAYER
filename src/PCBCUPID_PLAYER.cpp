@@ -267,6 +267,9 @@ void AUDIO_PLAYER::next()
     paused = false;
     stopped = false;
     lastCommandWasStop = false;
+
+    /*notify UI track change*/
+    notifyTrackChange();
 }
 
 void AUDIO_PLAYER::previous()
@@ -281,6 +284,8 @@ void AUDIO_PLAYER::previous()
     paused = false;
     stopped = false;
     lastCommandWasStop = false;
+    /*notify UI track change*/
+    notifyTrackChange();
 }
 
 bool AUDIO_PLAYER::playTrackIndex(int index)
@@ -315,6 +320,9 @@ bool AUDIO_PLAYER::playTrackIndex(int index)
     paused = false;
     stopped = false;
     lastCommandWasStop = false;
+
+      // Notify UI of track change
+    notifyTrackChange();
 
     return true;
 }
@@ -456,8 +464,8 @@ void AUDIO_PLAYER::playCurrentTrack()
 
     // Update source index to the selected track
     source->setIndex(trackIndex);
-    
-    //player->begin(); // begin playback
+
+    // player->begin(); // begin playback
 
     resetPlayTime();
     paused = false;
@@ -751,3 +759,30 @@ String AUDIO_PLAYER::listTracks()
     Serial.print(result);
     return result;
 }
+
+void AUDIO_PLAYER::setTrackChangeCallback(TrackChangeCallback cb)
+{
+    trackChangeCb = cb;
+}
+
+void AUDIO_PLAYER::notifyTrackChange()
+{
+    if (trackChangeCb)
+    {
+        String title = currentTrackName();
+        uint32_t duration = currentTrackDurationSeconds();
+        trackChangeCb(title.c_str(), duration);
+    }
+}
+
+void AUDIO_PLAYER::update()
+{
+    // Check if playback finished naturally
+    if (state == PLAYING && player && !player->isActive())
+    {
+        Serial.println("Track finished, moving to next...");
+        next();  // auto-advance + notify UI
+    }
+}
+
+

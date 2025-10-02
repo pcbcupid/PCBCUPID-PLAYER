@@ -13,23 +13,23 @@
 #include <AudioTools/AudioCodecs/CodecAACHelix.h>
 #include "Driver.h"
 
-
 // Configuration structure for pins
-struct AudioPlayerConfig {
+struct AudioPlayerConfig
+{
     // SD Card SPI Configuration
     int8_t sd_cs = 1;
     int8_t sd_miso = 3;
     int8_t sd_mosi = 2;
     int8_t sd_sck = 11;
-    
+
     // I2S Pins for NAU8325
     int8_t i2s_mclk = 22;
     int8_t i2s_bclk = 25;
     int8_t i2s_ws = 24;
     int8_t i2s_dout = 23;
-    
+
     // Default File Path
-    const char* audio_start_path = "/";
+    const char *audio_start_path = "/";
 };
 
 // Forward declarations
@@ -46,6 +46,8 @@ enum PlayerState
     PAUSED
 };
 
+typedef void (*TrackChangeCallback)(const char *title, uint32_t duration);
+
 class AUDIO_PLAYER
 {
 public:
@@ -61,11 +63,11 @@ public:
     void pause();
     void stop();
     void next();
-    void previous(); 
+    void previous();
 
     // Volume control
     void setVolume(float volume);
-    int getVolume() const { return int (volume * 100.0f);} 
+    int getVolume() const { return int(volume * 100.0f); }
     void setAutoFade(bool enable);
 
     // Track listing
@@ -93,19 +95,24 @@ public:
     void powerOnAmplifier() { nau8325_control.powerOn(); }
     void powerOffAmplifier() { nau8325_control.powerOff(); }
 
-     // Track management
+    // Track management
     std::vector<String> trackList;
     int trackIndex = 0;
 
-     int currentTrackIndex() const {return trackIndex; } //UI uses it 
+    int currentTrackIndex() const { return trackIndex; } // UI uses it
 
-     /*to retrieve track name by index*/
-      String getTrackNameAt(int index) const {
-        if (index >= 0 && index < (int)trackList.size()) {
+    /*to retrieve track name by index*/
+    String getTrackNameAt(int index) const
+    {
+        if (index >= 0 && index < (int)trackList.size())
+        {
             return trackList[index];
         }
         return "";
     }
+
+    void setTrackChangeCallback(TrackChangeCallback cb);
+    void update();
 
 private:
     // Internal state
@@ -118,7 +125,6 @@ private:
     PlayerState state = STOPPED;
     float volume = 0.5f; // Default volume (0.0 to 1.0)
 
-   
     // Timing
     unsigned long playStartMillis = 0;
     unsigned long pauseStartMillis = 0;
@@ -168,6 +174,9 @@ private:
 
     // Metadata callback
     static void printMetaData(MetaDataType type, const char *str, int len);
+
+    TrackChangeCallback trackChangeCb = nullptr;
+    void notifyTrackChange();
 
     AudioPlayerConfig config;
     TwoWire &wire;
