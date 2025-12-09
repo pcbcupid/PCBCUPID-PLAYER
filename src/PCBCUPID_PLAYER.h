@@ -13,6 +13,9 @@
 #include <AudioTools/AudioCodecs/CodecAACHelix.h>
 #include "Driver.h"
 
+namespace audio_tools {}  // Forward declare the namespace
+using namespace ::audio_tools;  // Use the ROOT namespace
+
 // Configuration structure for pins
 struct AudioPlayerConfig
 {
@@ -87,7 +90,7 @@ public:
     unsigned long currentTrackDurationSeconds() const;
 
     // Audio info
-    audio_tools::AudioPlayer *audioPlayer();
+    AudioPlayer *audioPlayer();
     AudioInfo audioInfo() const;
     AudioDecoder *getAudioDecoder(const char *ext);
 
@@ -134,21 +137,21 @@ private:
     bool lastCommandWasStop = false;
 
     // Audio components
-    audio_tools::I2SStream *i2s = nullptr;
-    audio_tools::AudioBoardStream *nau8325 = nullptr;
+    I2SStream *i2s = nullptr;
+    AudioBoardStream *nau8325 = nullptr;
     AudioSourceSD *source = nullptr;
-    audio_tools::AudioPlayer *player = nullptr;
+    AudioPlayer *player = nullptr;
 
     // Info handler
     class InfoHandler : public AudioInfoSupport
     {
-        audio_tools::I2SStream *i2s = nullptr;
-        audio_tools::AudioBoardStream *nau8325 = nullptr;
+        I2SStream *i2s = nullptr;
+        AudioBoardStream *nau8325 = nullptr;
         PCBCUPID_NAU8325 *nau8325_control = nullptr;
 
     public:
         AudioInfo lastInfo;
-        InfoHandler(audio_tools::AudioBoardStream *a, audio_tools::I2SStream *i, PCBCUPID_NAU8325 *control)
+        InfoHandler(AudioBoardStream *a, I2SStream *i, PCBCUPID_NAU8325 *control)
             : nau8325(a), i2s(i), nau8325_control(control) {}
         void setAudioInfo(AudioInfo info) override;
         AudioInfo audioInfo() override { return lastInfo; }

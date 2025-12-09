@@ -1,7 +1,7 @@
 #include "PCBCUPID_PLAYER.h"
 
 AUDIO_PLAYER::AUDIO_PLAYER(TwoWire &w, const AudioPlayerConfig &cfg)
-    : wire(w), config(cfg), nau8325_control(w), i2s(new audio_tools::I2SStream()) {}
+    : wire(w), config(cfg), nau8325_control(w), i2s(new I2SStream()) {} // fixed removed the namespace audiotools
 
 AUDIO_PLAYER::~AUDIO_PLAYER()
 {
@@ -420,7 +420,7 @@ unsigned long AUDIO_PLAYER::currentTrackTotalBytes() const
     return size;
 }
 
-audio_tools::AudioPlayer *AUDIO_PLAYER::audioPlayer()
+AudioPlayer *AUDIO_PLAYER::audioPlayer() // fixed removed namespace audio_tools
 {
     return player;
 }
