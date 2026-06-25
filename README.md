@@ -48,10 +48,35 @@ git clone https://github.com/pcbcupid/PCBCUPID-PLAYER.git
 
 ### 2. Install Dependencies
 
+This library requires the following libraries:
+
+### Option 1: Install from ZIP files
+
+Download the latest release ZIP files and install them through the Arduino IDE:
+
+**Sketch → Include Library → Add .ZIP Library...**
+
 - [AudioTools](https://github.com/pschatzmann/arduino-audio-tools)
 - [Arduino-Audio-Driver](https://github.com/pcbcupid/arduino-audio-driver.git)
 - [SD](https://github.com/arduino-libraries/SD)
 - [Wire](https://www.arduino.cc/en/Reference/Wire)
+
+### Option 2: Clone using Git
+
+```bash
+cd  ~/Documents/Arduino/libraries
+git clone https://github.com/pschatzmann/arduino-audio-tools.git
+```
+```bash
+cd  ~/Documents/Arduino/libraries
+git clone https://github.com/pschatzmann/arduino-audio-driver.git
+```
+
+Place the downloaded libraries in your Arduino `libraries` folder and restart the IDE.
+
+> [!IMPORTANT]
+> Make sure all required libraries are installed before compiling.
+> Missing dependencies may result in build errors.
 
 ### 3. Wiring
 
